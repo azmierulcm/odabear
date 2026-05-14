@@ -59,7 +59,11 @@ function AuthForm() {
       router.push('/dashboard')
       router.refresh()
     } else {
-      const { error } = await supabase.auth.signUp({ email, password })
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { emailRedirectTo: `${window.location.origin}/auth/callback?next=/welcome` },
+      })
       if (error) { setError(error.message); setLoading(false); return }
       setSuccess('Account created! Check your email to confirm, then sign in.')
       setLoading(false)
