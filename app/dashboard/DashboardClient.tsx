@@ -706,7 +706,14 @@ function ItemsTab({ userId, vendor, categories, items, itemLabel, isBooking, onC
       {showForm && (
         <div className="bg-white rounded-2xl border border-border p-6">
           <h2 className="text-base font-semibold text-ink mb-5">{editingItem ? `Edit ${itemLabel}` : `New ${itemLabel}`}</h2>
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form
+            onSubmit={handleSubmit}
+            onKeyDown={(e) => {
+              const tag = (e.target as HTMLElement).tagName
+              if (e.key === 'Enter' && tag !== 'TEXTAREA' && tag !== 'BUTTON') e.preventDefault()
+            }}
+            className="space-y-4"
+          >
             <div className="grid grid-cols-2 gap-3">
               <Field label="Name" required>
                 <input type="text" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={inputCls} />
