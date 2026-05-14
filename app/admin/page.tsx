@@ -3,6 +3,7 @@ import AdminClient from './AdminClient'
 
 export type VendorStat = {
   id: string
+  vendor_number: number | null
   name: string
   slug: string
   phone_number: string

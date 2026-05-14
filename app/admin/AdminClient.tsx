@@ -224,11 +224,24 @@ function ToggleSwitch({
 
 export default function AdminClient({ vendors: initial }: { vendors: VendorStat[] }) {
   const [vendors, setVendors] = useState<VendorStat[]>(initial)
-  const [busy, setBusy] = useState<string | null>(null)
+  const [busy, setBusy]       = useState<string | null>(null)
+  const [query, setQuery]     = useState('')
 
   const handleListingCreated = (vendorId: string) => {
     window.location.href = `/admin/vendor/${vendorId}`
   }
+
+  const filtered = query.trim()
+    ? vendors.filter((v) => {
+        const q = query.trim().toLowerCase()
+        return (
+          v.name.toLowerCase().includes(q) ||
+          v.slug.toLowerCase().includes(q) ||
+          v.phone_number.includes(q) ||
+          (v.vendor_number?.toString() ?? '').includes(q)
+        )
+      })
+    : vendors
 
   const handleToggle = async (vendor: VendorStat) => {
     setBusy(vendor.id)
@@ -253,15 +266,32 @@ export default function AdminClient({ vendors: initial }: { vendors: VendorStat[
   return (<>
     <CreateListingPanel onCreated={handleListingCreated} />
 
+    <div className="mb-4">
+      <input
+        type="search"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="Search by listing #, name, slug or phone…"
+        className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-brand/30"
+      />
+    </div>
+
     {vendors.length === 0 ? (
       <div className="bg-white rounded-2xl border border-border p-12 text-center text-fog text-sm">
         No vendors registered yet.
+      </div>
+    ) : filtered.length === 0 ? (
+      <div className="bg-white rounded-2xl border border-border p-12 text-center text-fog text-sm">
+        No listings match "{query}".
       </div>
     ) : (
     <div className="bg-white rounded-2xl border border-border overflow-hidden">
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-border bg-surface">
+            <th className="px-4 py-3.5 text-left text-xs font-semibold text-fog uppercase tracking-widest w-12">
+              #
+            </th>
             <th className="px-6 py-3.5 text-left text-xs font-semibold text-fog uppercase tracking-widest">
               Vendor
             </th>
@@ -283,8 +313,14 @@ export default function AdminClient({ vendors: initial }: { vendors: VendorStat[
           </tr>
         </thead>
         <tbody className="divide-y divide-surface">
-          {vendors.map((vendor) => (
+          {filtered.map((vendor) => (
             <tr key={vendor.id} className="hover:bg-surface/60 transition-colors">
+              {/* Listing number */}
+              <td className="px-4 py-4 text-center">
+                <span className="text-xs font-mono font-bold text-fog">
+                  {vendor.vendor_number != null ? `#${vendor.vendor_number}` : '—'}
+                </span>
+              </td>
               {/* Name + phone */}
               <td className="px-6 py-4">
                 <p className="font-semibold text-ink">{vendor.name}</p>

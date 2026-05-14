@@ -1173,7 +1173,12 @@ function BookingsTab({ vendor, supabase }: {
           <div key={b.id} className="bg-white rounded-2xl border border-border p-5 space-y-3">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="font-bold text-ink">{b.customer_name}</p>
+                <div className="flex items-center gap-2 mb-0.5">
+                  <p className="font-bold text-ink">{b.customer_name}</p>
+                  <span className="text-xs font-mono font-semibold text-fog bg-surface px-1.5 py-0.5 rounded">
+                    {b.short_booking_id ?? `BKG-${b.id.slice(-4).toUpperCase()}`}
+                  </span>
+                </div>
                 {b.customer_phone && <p className="text-xs text-fog mt-0.5">{b.customer_phone}</p>}
                 {b.service_name && <p className="text-xs text-brand font-semibold mt-0.5">{b.service_name}</p>}
               </div>

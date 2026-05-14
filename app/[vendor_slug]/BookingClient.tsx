@@ -9,6 +9,13 @@ interface Props {
   categories: CategoryWithItems[]
 }
 
+function makeShortBookingId(): string {
+  const CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+  let suffix = ''
+  for (let i = 0; i < 4; i++) suffix += CHARS[Math.floor(Math.random() * CHARS.length)]
+  return `BKG-${suffix}`
+}
+
 export default function BookingClient({ vendor, categories }: Props) {
   const services = categories.flatMap((c) => c.items.filter((i) => i.is_available))
   const allItems  = categories.flatMap((c) => c.items)
@@ -45,8 +52,11 @@ export default function BookingClient({ vendor, categories }: Props) {
     if (!canRequest || !selectedService) return
     if (!guestName.trim()) return  // guard whitespace-only names
 
+    const shortBookingId = makeShortBookingId()
+
     const lines = [
       `*Booking Request — ${guestName.trim()}*`,
+      `🔖 Ref: ${shortBookingId}`,
       guestPhone.trim() ? `📞 ${guestPhone.trim()}` : '',
       '',
       `🏡 *${selectedService.name}*`,
@@ -72,14 +82,15 @@ export default function BookingClient({ vendor, categories }: Props) {
     setDrawerOpen(false)
 
     supabase.from('bookings').insert({
-      vendor_id:      vendor.id,
-      customer_name:  guestName.trim(),
-      customer_phone: guestPhone.trim(),
-      service_name:   selectedService.name,
-      start_date:     checkIn,
-      end_date:       checkOut,
-      notes:          notes.trim() || null,
-      status:         'pending',
+      vendor_id:        vendor.id,
+      short_booking_id: shortBookingId,
+      customer_name:    guestName.trim(),
+      customer_phone:   guestPhone.trim(),
+      service_name:     selectedService.name,
+      start_date:       checkIn,
+      end_date:         checkOut,
+      notes:            notes.trim() || null,
+      status:           'pending',
     }).then(({ error }) => {
       if (error) console.error('Booking insert failed:', error.message)
     })

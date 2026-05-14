@@ -79,6 +79,7 @@ export type BookingStatus = 'pending' | 'confirmed' | 'cancelled'
 export type Booking = {
   id: string
   vendor_id: string
+  short_booking_id: string | null
   customer_name: string
   customer_phone: string
   service_name: string
