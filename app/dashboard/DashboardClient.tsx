@@ -718,7 +718,7 @@ function ItemsTab({ userId, vendor, categories, items, itemLabel, isBooking, onC
             </div>
             <Field label="Description">
               <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })}
-                className={`${inputCls} resize-none`} placeholder="Optional" rows={3} />
+                className={`${inputCls} resize-y min-h-[120px]`} placeholder="Optional" rows={5} />
             </Field>
             <Field label="Category" required>
               <select required value={form.category_id} onChange={(e) => setForm({ ...form, category_id: e.target.value })} className={inputCls}>
