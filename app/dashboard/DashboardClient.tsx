@@ -209,11 +209,26 @@ function ProfileTab({ userId, vendor, businessType, onSaved, supabase }: {
     setSaving(true)
     setMessage(null)
 
+    // Phone: digits only, 8–15 chars (covers Malaysian 60xxxxxxxxx format)
+    const digitsOnly = phone.replace(/\D/g, '')
+    if (digitsOnly.length < 8 || digitsOnly.length > 15) {
+      setMessage({ type: 'error', text: 'Phone number must be 8–15 digits, e.g. 60123456789.' })
+      setSaving(false)
+      return
+    }
+
+    // Logo URL: https:// only (blocks javascript: and data: URIs)
+    if (logoUrl.trim() && !logoUrl.trim().startsWith('https://')) {
+      setMessage({ type: 'error', text: 'Logo URL must start with https://' })
+      setSaving(false)
+      return
+    }
+
     const payload = {
       user_id:       userId,
       name:          name.trim(),
       slug:          slug.trim().toLowerCase().replace(/\s+/g, '-'),
-      phone_number:  phone.trim(),
+      phone_number:  digitsOnly,
       logo_url:      logoUrl.trim() || null,
       description:   description.trim() || null,
       promo_text:    promoText.trim() || null,
@@ -589,6 +604,14 @@ function ItemsTab({ userId, vendor, categories, items, itemLabel, isBooking, onC
     e.preventDefault()
     setBusy(true)
     setSubmitError(null)
+
+    // Reject non-https image URLs (blocks javascript: and data: URIs)
+    const rawImageUrl = form.image_url.trim()
+    if (rawImageUrl && !rawImageUrl.startsWith('https://')) {
+      setSubmitError('Image URL must start with https://')
+      setBusy(false)
+      return
+    }
 
     // Build payload — only include image_urls if the column exists (booking type).
     // For non-booking types we omit it entirely to avoid DB errors if migration hasn't run.
