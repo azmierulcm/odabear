@@ -23,6 +23,7 @@ WHERE trial_ends_at IS NULL;
 CREATE OR REPLACE VIEW vendor_stats AS
 SELECT
   v.id,
+  v.vendor_number,
   v.name,
   v.slug,
   v.phone_number,
