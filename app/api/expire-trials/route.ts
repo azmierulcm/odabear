@@ -9,9 +9,9 @@ import { adminSupabase } from '@/lib/supabase/admin'
  * a trial-ended email to the account owner.
  */
 export async function GET(req: Request) {
-  // ── Auth ─────────────────────────────────────────────────
-  const secret = new URL(req.url).searchParams.get('secret')
-  if (!secret || secret !== process.env.CRON_SECRET) {
+  // ── Auth — secret in Authorization header, not query param ──
+  const auth = req.headers.get('authorization')
+  if (!auth || auth !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

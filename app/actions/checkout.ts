@@ -1,24 +1,31 @@
 'use server'
 
-import { adminSupabase } from '@/lib/supabase/admin'
+import { z } from 'zod'
+import { createClient } from '@/lib/supabase/server'
 
-// ─── Types ────────────────────────────────────────────────────
+// ─── Validation schema ────────────────────────────────────────
+
+const CheckoutSchema = z.object({
+  vendor_id:        z.string().uuid('Invalid vendor.'),
+  customer_name:    z.string().min(1, 'Name is required.').max(100),
+  customer_phone:   z.string().max(20).optional().default(''),
+  notes:            z.string().max(500).optional().default(''),
+  delivery_type:    z.enum(['pickup', 'delivery']),
+  delivery_address: z.string().max(300).optional().default(''),
+  items: z.array(z.object({
+    name:     z.string().min(1).max(100),
+    price:    z.number().positive().max(10000),
+    quantity: z.number().int().positive().max(99),
+  })).min(1, 'Cart is empty.').max(50),
+  total_price: z.number().positive().max(100000),
+})
+
+export type CheckoutPayload = z.input<typeof CheckoutSchema>
 
 export interface CheckoutItem {
   name: string
   price: number
   quantity: number
-}
-
-export interface CheckoutPayload {
-  vendor_id: string
-  customer_name: string
-  customer_phone: string
-  notes: string
-  delivery_type: 'pickup' | 'delivery'
-  delivery_address: string
-  items: CheckoutItem[]
-  total_price: number
 }
 
 export interface CheckoutResult {
@@ -30,10 +37,6 @@ export interface CheckoutResult {
 
 // ─── Helpers ──────────────────────────────────────────────────
 
-/**
- * Generates a short, human-readable order ID like "ORD-A3F9".
- * Omits O/0 and I/1 to reduce misreading risk.
- */
 function makeShortOrderId(): string {
   const CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
   let suffix = ''
@@ -43,7 +46,6 @@ function makeShortOrderId(): string {
   return `ORD-${suffix}`
 }
 
-/** True when the error is a PostgREST "column does not exist" error (code 42703). */
 function isMissingColumnError(msg: string): boolean {
   return msg.includes('column') || msg.includes('42703') || msg.includes('does not exist')
 }
@@ -51,26 +53,31 @@ function isMissingColumnError(msg: string): boolean {
 // ─── Server Action ────────────────────────────────────────────
 
 export async function checkoutToWhatsApp(
-  payload: CheckoutPayload,
+  raw: unknown,
 ): Promise<CheckoutResult> {
-  // Server-side validation
-  if (!payload.customer_name?.trim()) {
-    return { success: false, error: 'Name is required.' }
+  // 1. Validate & sanitise all inputs
+  const parsed = CheckoutSchema.safeParse(raw)
+  if (!parsed.success) {
+    const firstError = parsed.error.issues[0]?.message ?? 'Invalid order data.'
+    return { success: false, error: firstError }
   }
-  if (payload.delivery_type === 'delivery' && !payload.delivery_address?.trim()) {
-    return { success: false, error: 'Delivery address is required.' }
+  const payload = parsed.data
+
+  // 2. Re-derive total server-side — never trust the client total
+  const derivedTotal = payload.items.reduce(
+    (sum, item) => sum + item.price * item.quantity, 0
+  )
+  if (Math.abs(derivedTotal - payload.total_price) > 0.01) {
+    return { success: false, error: 'Order total mismatch. Please refresh and try again.' }
   }
-  if (!payload.items?.length) {
-    return { success: false, error: 'Cart is empty.' }
-  }
-  if (payload.total_price <= 0) {
-    return { success: false, error: 'Invalid order total.' }
-  }
+
+  // 3. Use user-scoped client — RLS ensures vendor is active before insert
+  const supabase = await createClient()
 
   const short_order_id = makeShortOrderId()
 
-  // ── Attempt 1: full insert with all new columns ───────────
-  const { data, error } = await adminSupabase
+  // ── Attempt 1: full insert with all columns ───────────────
+  const { data, error } = await supabase
     .from('orders')
     .insert({
       vendor_id:        payload.vendor_id,
@@ -79,7 +86,7 @@ export async function checkoutToWhatsApp(
       customer_phone:   payload.customer_phone.trim() || null,
       cart_items:       payload.items,
       items:            payload.items,
-      total_price:      payload.total_price,
+      total_price:      derivedTotal,
       delivery_type:    payload.delivery_type,
       delivery_address: payload.delivery_type === 'delivery'
                           ? payload.delivery_address.trim()
@@ -100,10 +107,7 @@ export async function checkoutToWhatsApp(
 
   console.error('[checkoutToWhatsApp] Full insert failed:', error.message)
 
-  // ── Attempt 2: fallback to legacy columns only ────────────
-  // Runs when the DB migration (orders-schema.sql) hasn't been applied yet.
-  // The short_order_id is generated and returned even though it's not
-  // persisted — the order is still saved and the WA message still carries it.
+  // ── Attempt 2: fallback to legacy columns ─────────────────
   if (isMissingColumnError(error.message)) {
     const deliveryNote = payload.delivery_type === 'delivery'
       ? `Delivery to: ${payload.delivery_address.trim()}.`
@@ -113,14 +117,14 @@ export async function checkoutToWhatsApp(
       .filter(Boolean)
       .join(' | ')
 
-    const { error: fallbackError } = await adminSupabase
+    const { error: fallbackError } = await supabase
       .from('orders')
       .insert({
         vendor_id:      payload.vendor_id,
         customer_name:  payload.customer_name.trim(),
         customer_phone: payload.customer_phone.trim() || null,
         items:          payload.items,
-        total_price:    payload.total_price,
+        total_price:    derivedTotal,
         notes:          notesWithDelivery || null,
         status:         'pending',
       })
@@ -130,11 +134,10 @@ export async function checkoutToWhatsApp(
       return { success: false, error: fallbackError.message }
     }
 
-    // Order saved via legacy schema — return the generated ID anyway
     return {
       success:        true,
       short_order_id,
-      total_price:    payload.total_price,
+      total_price:    derivedTotal,
     }
   }
 
