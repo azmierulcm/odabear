@@ -11,7 +11,9 @@ import { createClient } from '@/lib/supabase/server'
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get('code')
-  const next = searchParams.get('next') ?? '/welcome'
+  const rawNext = searchParams.get('next') ?? '/welcome'
+  // Only allow internal paths — reject anything that could redirect off-site
+  const next = rawNext.startsWith('/') && !rawNext.startsWith('//') ? rawNext : '/welcome'
 
   if (code) {
     const supabase = await createClient()

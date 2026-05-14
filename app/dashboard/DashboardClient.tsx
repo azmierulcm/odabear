@@ -357,6 +357,7 @@ function GalleryField({ userId, vendorId, urls, onChange, supabase }: {
 
   const handleUpload = async (file: File) => {
     if (urls.length >= 5) return
+    if (file.size > 5 * 1024 * 1024) { setError('File too large. Max 5 MB.'); return }
     setUploading(true)
     setError(null)
     const ext  = file.name.split('.').pop() ?? 'jpg'
@@ -556,6 +557,7 @@ function ItemsTab({ userId, vendor, categories, items, itemLabel, isBooking, onC
   }
 
   const handleImageUpload = async (file: File) => {
+    if (file.size > 5 * 1024 * 1024) { setUploadError('File too large. Max 5 MB.'); return }
     setUploading(true)
     setUploadError(null)
     const ext  = file.name.split('.').pop() ?? 'jpg'
@@ -573,6 +575,7 @@ function ItemsTab({ userId, vendor, categories, items, itemLabel, isBooking, onC
   // Multi-photo upload for booking type (up to 5 photos per room)
   const handleRoomPhotoUpload = async (file: File) => {
     if (form.image_urls.length >= 5) return
+    if (file.size > 5 * 1024 * 1024) { setUploadError('File too large. Max 5 MB.'); return }
     setUploading(true)
     setUploadError(null)
     const ext  = file.name.split('.').pop() ?? 'jpg'
@@ -1454,6 +1457,7 @@ function SettingsTab({ userId, vendor, onSaved, supabase }: {
     setMethods((prev) => prev.map((m, idx) => idx === i ? { ...m, ...patch } as PMDraft : m))
 
   const handleQrUpload = async (file: File, idx: number) => {
+    if (file.size > 5 * 1024 * 1024) { setUploadError('File too large. Max 5 MB.'); return }
     setUploadingIdx(idx)
     setUploadError(null)
     const ext = file.name.split('.').pop() ?? 'png'
