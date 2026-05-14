@@ -183,9 +183,10 @@ function ProfileTab({ userId, vendor, businessType, onSaved, supabase }: {
   const [slug, setSlug]               = useState(vendor?.slug ?? '')
   const [phone, setPhone]             = useState(vendor?.phone_number ?? '')
   const [logoUrl, setLogoUrl]         = useState(vendor?.logo_url ?? '')
-  const [description, setDescription] = useState(vendor?.description ?? '')
-  const [promoText, setPromoText]     = useState(vendor?.promo_text ?? '')
-  const [galleryUrls, setGalleryUrls] = useState<string[]>(vendor?.gallery_urls ?? [])
+  const [description, setDescription]         = useState(vendor?.description ?? '')
+  const [promoText, setPromoText]             = useState(vendor?.promo_text ?? '')
+  const [locationAddress, setLocationAddress] = useState(vendor?.location_address ?? '')
+  const [galleryUrls, setGalleryUrls]         = useState<string[]>(vendor?.gallery_urls ?? [])
   const [logoUploading, setLogoUploading] = useState(false)
   const [logoUploadError, setLogoUploadError] = useState<string | null>(null)
   const [saving, setSaving]           = useState(false)
@@ -236,9 +237,10 @@ function ProfileTab({ userId, vendor, businessType, onSaved, supabase }: {
       phone_number:  phone.trim(),
       logo_url:      logoUrl.trim() || null,
       description:   description.trim() || null,
-      promo_text:    promoText.trim() || null,
-      gallery_urls:  galleryUrls,
-      business_type: businessType,
+      promo_text:       promoText.trim() || null,
+      location_address: businessType === 'booking' ? (locationAddress.trim() || null) : null,
+      gallery_urls:     galleryUrls,
+      business_type:    businessType,
     }
 
     let result
@@ -303,6 +305,14 @@ function ProfileTab({ userId, vendor, businessType, onSaved, supabase }: {
               rows={3} placeholder={descPlaceholder}
               className={`${inputCls} resize-none`} />
           </Field>
+
+          {businessType === 'booking' && (
+            <Field label="Location / Address" hint="Customers will see a map and a Get Directions link on your page">
+              <textarea value={locationAddress} onChange={(e) => setLocationAddress(e.target.value)}
+                rows={2} placeholder="e.g. Lot 12, Jalan Pantai, 43000 Kajang, Selangor"
+                className={`${inputCls} resize-y`} />
+            </Field>
+          )}
 
           {businessType !== 'booking' && (
             <Field label="Promo / Announcement" hint="Highlighted banner on your page (optional)">
