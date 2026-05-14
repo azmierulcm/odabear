@@ -14,7 +14,7 @@ async function verifyAdmin(): Promise<string> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user || user.email !== process.env.ADMIN_EMAIL) throw new Error('Unauthorized')
-  return user.email
+  return user.email!
 }
 
 export async function adminUpdateVendor(vendorId: string, payload: Record<string, unknown>) {
