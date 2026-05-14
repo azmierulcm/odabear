@@ -263,7 +263,14 @@ function ProfileTab({ userId, vendor, businessType, onSaved, supabase }: {
 
       <div className="bg-white rounded-2xl border border-border p-6">
         <h2 className="text-base font-semibold text-ink mb-5">Business details</h2>
-        <form onSubmit={handleSave} className="space-y-4">
+        <form
+          onSubmit={handleSave}
+          onKeyDown={(e) => {
+            const tag = (e.target as HTMLElement).tagName
+            if (e.key === 'Enter' && tag !== 'TEXTAREA' && tag !== 'BUTTON') e.preventDefault()
+          }}
+          className="space-y-4"
+        >
           <Field label="Business Name" required>
             <input type="text" required value={name} onChange={(e) => setName(e.target.value)}
               placeholder={businessType === 'booking' ? 'e.g. Tepi Pantai Chalet' : 'e.g. Demo Kopitiam'}
@@ -1495,7 +1502,14 @@ function SettingsTab({ userId, vendor, onSaved, supabase }: {
   }
 
   return (
-    <form onSubmit={handleSave} className="space-y-6">
+    <form
+      onSubmit={handleSave}
+      onKeyDown={(e) => {
+        const tag = (e.target as HTMLElement).tagName
+        if (e.key === 'Enter' && tag !== 'TEXTAREA' && tag !== 'BUTTON') e.preventDefault()
+      }}
+      className="space-y-6"
+    >
       <div className="bg-white rounded-2xl border border-border p-6 space-y-4">
         <h2 className="text-base font-semibold text-ink">Contact</h2>
         <Field label="WhatsApp Number" hint="Include country code — customers will contact you here" required>
