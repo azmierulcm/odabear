@@ -9,12 +9,12 @@ export const metadata: Metadata = {
   description: 'Digital menus for F&B businesses',
 }
 
-// Without this, Android Chrome renders at ~980px and intercepts ALL touch
-// events for its own pan/zoom — nothing ever reaches JavaScript.
+// width=device-width + initialScale=1 stops Android Chrome from rendering
+// at 980px and intercepting touch events. maximumScale is intentionally
+// NOT set so users can pinch-zoom for accessibility.
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1,
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
