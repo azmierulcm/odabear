@@ -65,17 +65,32 @@ const comparisons = [
       badgeCls: 'text-red-500 bg-red-50',
       borderCls: 'border-red-100',
       content: (
-        <div className="bg-red-50 rounded-xl p-4 flex flex-col items-center gap-2">
-          <div className="relative w-24 h-24">
-            <div className="w-24 h-24 rounded-full bg-amber-300 border-4 border-amber-400 flex items-center justify-center text-4xl shadow-inner">🍕</div>
-            <div className="absolute top-0 right-0 w-12 h-12 rounded-tr-full bg-red-100 border-2 border-dashed border-red-300 flex items-end justify-start p-1">
-              <span className="text-[9px] font-black text-red-500 leading-none">30%</span>
+        <div className="bg-red-50 rounded-xl p-3 space-y-2">
+          <p className="text-[9px] font-bold text-red-400 uppercase tracking-wider px-0.5">Your October Statement</p>
+          <div className="bg-white rounded-lg border border-red-100 overflow-hidden">
+            <div className="px-3 py-2 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-gray-500">📦 You sold</span>
+                <span className="text-[10px] font-bold text-gray-800">RM 3,000</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-red-400">✂️ Commission (30%)</span>
+                <span className="text-[10px] font-bold text-red-500">– RM 900</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-red-300">📦 Packaging fee</span>
+                <span className="text-[10px] font-bold text-red-400">– RM 80</span>
+              </div>
+            </div>
+            <div className="bg-red-50 border-t border-red-100 px-3 py-2 flex items-center justify-between">
+              <span className="text-[10px] font-bold text-gray-700">You take home</span>
+              <span className="text-[11px] font-black text-red-600">RM 2,020</span>
             </div>
           </div>
-          <p className="text-[11px] font-bold text-red-500 text-center">Every 3rd order goes to the platform,<br/>not your pocket.</p>
+          <p className="text-[9px] text-red-500 font-semibold text-center leading-snug">You cooked everything. They kept RM 980.</p>
         </div>
       ),
-      bullets: ['Up to 30% cut per order', 'Less profit the more you sell', 'You work, they earn'],
+      bullets: ['Up to 30% cut per order', 'More sales = more taken from you', 'You work, they earn'],
       bulletIcon: '✕',
       bulletCls: 'text-red-400',
     },
@@ -86,9 +101,27 @@ const comparisons = [
       badgeCls: 'text-green-700 bg-green-50',
       borderCls: 'border-green-100',
       content: (
-        <div className="bg-green-50 rounded-xl p-4 flex flex-col items-center gap-2">
-          <div className="w-24 h-24 rounded-full bg-amber-300 border-4 border-amber-400 flex items-center justify-center text-4xl shadow-inner">🍕</div>
-          <p className="text-[11px] font-bold text-green-600 text-center">100% of every order<br/>lands in your pocket.</p>
+        <div className="bg-green-50 rounded-xl p-3 space-y-2">
+          <p className="text-[9px] font-bold text-green-500 uppercase tracking-wider px-0.5">Your October Statement</p>
+          <div className="bg-white rounded-lg border border-green-100 overflow-hidden">
+            <div className="px-3 py-2 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-gray-500">📦 You sold</span>
+                <span className="text-[10px] font-bold text-gray-800">RM 3,000</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-gray-400">📋 Jomoda flat fee</span>
+                <span className="text-[10px] font-bold text-gray-500">– RM 150</span>
+              </div>
+            </div>
+            <div className="bg-green-50 border-t border-green-100 px-3 py-2 flex items-center justify-between">
+              <span className="text-[10px] font-bold text-gray-700">You take home</span>
+              <span className="text-[11px] font-black text-green-600">RM 2,850</span>
+            </div>
+          </div>
+          <div className="bg-green-100 rounded-lg px-3 py-1.5 text-center">
+            <p className="text-[9px] font-bold text-green-700">💰 RM 830 more than delivery apps</p>
+          </div>
         </div>
       ),
       bullets: ['RM 150 flat, no matter how much you sell', '0% commission always', '100% profit stays with you'],
@@ -104,24 +137,82 @@ const comparisons = [
       badgeCls: 'text-red-500 bg-red-50',
       borderCls: 'border-red-100',
       content: (
-        <div className="bg-gray-900 rounded-xl p-2.5 space-y-1.5">
-          <p className="text-[9px] text-gray-400 font-semibold px-1">📱 Gallery · 847 items</p>
-          <div className="grid grid-cols-3 gap-1">
-            {[
-              { bg: 'bg-blue-200', label: 'Done bang ✓', sub: 'Transfer RM23' },
-              { bg: 'bg-green-200', label: 'Resit', sub: 'Maybank' },
-              { bg: 'bg-yellow-100', label: 'Bukti', sub: 'RM47.50' },
-              { bg: 'bg-pink-100', label: '??', sub: 'blurry' },
-              { bg: 'bg-blue-100', label: 'Transfer', sub: 'RM15' },
-              { bg: 'bg-gray-200', label: 'Resit lagi', sub: 'RHB' },
-            ].map((item, i) => (
-              <div key={i} className={`${item.bg} rounded-md p-1 aspect-square flex flex-col justify-end`}>
-                <p className="text-[7px] font-bold text-gray-700 leading-tight truncate">{item.label}</p>
-                <p className="text-[6px] text-gray-500 truncate">{item.sub}</p>
-              </div>
-            ))}
+        <div className="bg-gray-900 rounded-xl overflow-hidden">
+          {/* Phone gallery chrome */}
+          <div className="flex items-center gap-1.5 px-2.5 py-1.5 border-b border-gray-700/60">
+            <span className="text-[9px]">📸</span>
+            <span className="text-[9px] text-gray-300 font-semibold">Gallery · 847 items</span>
           </div>
-          <p className="text-[8px] text-gray-500 text-center italic">"Which one was from Farah again...?"</p>
+          {/* Photo grid — no gap so it looks like a real phone gallery */}
+          <div className="grid grid-cols-3 gap-[1.5px] bg-gray-800">
+            {/* 1. Food photo */}
+            <div className="aspect-square relative overflow-hidden" style={{ background: 'linear-gradient(135deg,#f97316,#dc2626)' }}>
+              <div className="absolute inset-0 flex items-center justify-center text-[30px]">🍛</div>
+              <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent px-1.5 pb-1 pt-4">
+                <p className="text-[7px] font-bold text-white leading-tight">Done bang ✓</p>
+                <p className="text-[6px] text-gray-300">Transfer RM23</p>
+              </div>
+            </div>
+            {/* 2. Receipt screenshot */}
+            <div className="aspect-square relative overflow-hidden bg-white">
+              <div className="p-1.5 space-y-0.5">
+                <p className="text-[6px] font-black text-blue-700 tracking-tight">MAYBANK2U</p>
+                <div className="border-t border-gray-200 pt-0.5 space-y-0.5">
+                  <p className="text-[5px] text-gray-500 font-mono">PEMINDAHAN</p>
+                  <p className="text-[5px] text-gray-500 font-mono">BERJAYA</p>
+                  <p className="text-[7px] font-black text-gray-800">RM 47.50</p>
+                </div>
+              </div>
+              <div className="absolute bottom-0 inset-x-0 bg-black/60 px-1.5 pb-1 pt-2">
+                <p className="text-[7px] font-bold text-white">Resit</p>
+                <p className="text-[6px] text-gray-300">Maybank</p>
+              </div>
+            </div>
+            {/* 3. Food photo */}
+            <div className="aspect-square relative overflow-hidden" style={{ background: 'linear-gradient(135deg,#fbbf24,#f59e0b)' }}>
+              <div className="absolute inset-0 flex items-center justify-center text-[30px]">🥘</div>
+              <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent px-1.5 pb-1 pt-4">
+                <p className="text-[7px] font-bold text-white leading-tight">Bukti</p>
+                <p className="text-[6px] text-gray-300">RM47.50</p>
+              </div>
+            </div>
+            {/* 4. Blurry photo */}
+            <div className="aspect-square relative overflow-hidden" style={{ background: 'linear-gradient(135deg,#ec4899,#f43f5e)' }}>
+              <div className="absolute inset-0 flex items-center justify-center text-[34px]" style={{ filter: 'blur(5px)', transform: 'scale(1.2)' }}>🍱</div>
+              <div className="absolute inset-0 bg-white/10" />
+              <div className="absolute bottom-0 inset-x-0 bg-black/60 px-1.5 pb-1 pt-2">
+                <p className="text-[7px] font-bold text-white">??</p>
+                <p className="text-[6px] text-gray-300">blurry 😵</p>
+              </div>
+            </div>
+            {/* 5. Bank notification */}
+            <div className="aspect-square relative overflow-hidden bg-[#003087]">
+              <div className="p-1.5">
+                <p className="text-[6px] font-black text-white/80 tracking-tight">CIMB BANK</p>
+                <p className="text-[5px] text-white/60 mt-0.5">Kredit Diterima</p>
+                <p className="text-[10px] font-black text-white mt-1">RM15.00</p>
+              </div>
+              <div className="absolute bottom-0 inset-x-0 bg-black/50 px-1.5 pb-1 pt-2">
+                <p className="text-[7px] font-bold text-white">Transfer</p>
+                <p className="text-[6px] text-gray-300">RM15</p>
+              </div>
+            </div>
+            {/* 6. Another receipt */}
+            <div className="aspect-square relative overflow-hidden bg-gray-50">
+              <div className="p-1.5 space-y-0.5">
+                <p className="text-[6px] font-black text-red-600">RHB</p>
+                <div className="border-t border-gray-200 pt-0.5 space-y-0.5">
+                  <p className="text-[5px] text-gray-500 font-mono">TRANSFER</p>
+                  <p className="text-[7px] font-black text-gray-800">RM 29.00</p>
+                </div>
+              </div>
+              <div className="absolute bottom-0 inset-x-0 bg-black/60 px-1.5 pb-1 pt-2">
+                <p className="text-[7px] font-bold text-white">Resit lagi</p>
+                <p className="text-[6px] text-gray-300">RHB</p>
+              </div>
+            </div>
+          </div>
+          <p className="text-[8px] text-gray-500 text-center italic py-1.5 px-2">&ldquo;Which one was from Farah again...?&rdquo;</p>
         </div>
       ),
       bullets: ['Blurry screenshots as receipts', 'No idea who paid or how much', '"Is this your accounting system?"'],
