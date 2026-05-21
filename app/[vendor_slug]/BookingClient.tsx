@@ -40,10 +40,23 @@ export default function BookingClient({ vendor, categories }: Props) {
     return Math.max(0, Math.round((b - a) / 86400000))
   }, [checkIn, checkOut])
 
+  const blockedSet = useMemo(() => new Set(vendor.blocked_dates ?? []), [vendor.blocked_dates])
+
+  const hasConflict = useMemo(() => {
+    if (!checkIn || !checkOut || nights <= 0) return false
+    const DAY = 86400000
+    const startMs = new Date(checkIn  + 'T00:00:00Z').getTime()
+    const endMs   = new Date(checkOut + 'T00:00:00Z').getTime()
+    for (let ms = startMs; ms < endMs; ms += DAY) {
+      if (blockedSet.has(new Date(ms).toISOString().split('T')[0])) return true
+    }
+    return false
+  }, [checkIn, checkOut, nights, blockedSet])
+
   const total = selectedService ? selectedService.price * nights : 0
   const today = new Date().toISOString().split('T')[0]
 
-  const canRequest = !!selectedService && !!checkIn && !!checkOut && nights > 0 && !!guestName.trim()
+  const canRequest = !!selectedService && !!checkIn && !!checkOut && nights > 0 && !!guestName.trim() && !hasConflict
 
   const [waBlocked, setWaBlocked] = useState(false)
   const [waUrl,     setWaUrl]     = useState('')
@@ -227,6 +240,7 @@ export default function BookingClient({ vendor, categories }: Props) {
               total={total}
               today={today}
               canRequest={canRequest}
+              hasConflict={hasConflict}
               onRequest={handleRequest}
               submitted={submitted}
               onReset={() => setSubmitted(false)}
@@ -316,6 +330,7 @@ export default function BookingClient({ vendor, categories }: Props) {
                 total={total}
                 today={today}
                 canRequest={canRequest}
+                hasConflict={hasConflict}
                 onRequest={handleRequest}
                 submitted={submitted}
                 onReset={() => setSubmitted(false)}
@@ -529,6 +544,7 @@ interface BookingWidgetProps {
   total: number
   today: string
   canRequest: boolean
+  hasConflict: boolean
   onRequest: () => void
   submitted: boolean
   onReset: () => void
@@ -538,7 +554,7 @@ function BookingWidget({
   vendor, services, selectedService, onSelectService,
   checkIn, checkOut, onCheckIn, onCheckOut,
   guestName, onGuestName, guestPhone, onGuestPhone,
-  notes, onNotes, nights, total, today, canRequest, onRequest, submitted, onReset,
+  notes, onNotes, nights, total, today, canRequest, hasConflict, onRequest, submitted, onReset,
 }: BookingWidgetProps) {
   if (submitted) {
     return (
@@ -616,6 +632,11 @@ function BookingWidget({
         {/* Same-date error */}
         {checkIn && checkOut && nights === 0 && (
           <p className="text-xs text-brand font-semibold -mt-1">Check-out must be after check-in.</p>
+        )}
+
+        {/* Blocked-date conflict */}
+        {hasConflict && (
+          <p className="text-xs text-brand font-semibold -mt-1">These dates include unavailable days. Please choose different dates.</p>
         )}
 
         {/* Night count */}
