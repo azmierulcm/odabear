@@ -4,10 +4,16 @@ import { useState, useRef, useMemo, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { Vendor, CategoryWithItems, Item } from '@/types/menu'
 
+interface BookingRecord {
+  start_date: string
+  end_date: string
+  service_name: string
+}
+
 interface Props {
   vendor: Vendor
   categories: CategoryWithItems[]
-  bookedDates?: string[]   // confirmed/pending booking dates from server
+  bookings?: BookingRecord[]  // non-cancelled bookings with service name
 }
 
 function makeShortBookingId(): string {
@@ -17,7 +23,7 @@ function makeShortBookingId(): string {
   return `BKG-${suffix}`
 }
 
-export default function BookingClient({ vendor, categories, bookedDates = [] }: Props) {
+export default function BookingClient({ vendor, categories, bookings = [] }: Props) {
   const services = categories.flatMap((c) => c.items.filter((i) => i.is_available))
   const allItems  = categories.flatMap((c) => c.items)
 
@@ -56,11 +62,38 @@ export default function BookingClient({ vendor, categories, bookedDates = [] }: 
     return () => { supabase.removeChannel(channel) }
   }, [vendor.id, supabase])
 
-  // All unavailable dates = vendor-blocked + already-confirmed-booked
+  // Expand booked date ranges for the currently selected room only.
+  // If no room is selected the calendar isn't shown, so this returns [].
+  const bookedDatesForService = useMemo(() => {
+    if (!selectedService) return []
+    const DAY = 86400000
+    const dates: string[] = []
+    for (const b of bookings) {
+      if (b.service_name !== selectedService.name) continue
+      const startMs = new Date(b.start_date + 'T00:00:00Z').getTime()
+      const endMs   = new Date(b.end_date   + 'T00:00:00Z').getTime()
+      for (let ms = startMs; ms <= endMs; ms += DAY) {
+        dates.push(new Date(ms).toISOString().split('T')[0])
+      }
+    }
+    return dates
+  }, [selectedService, bookings])
+
+  // All unavailable dates = vendor-blocked (all rooms) + already-booked (this room)
   const unavailableDates = useMemo(
-    () => [...liveBlockedDates, ...bookedDates],
-    [liveBlockedDates, bookedDates],
+    () => [...liveBlockedDates, ...bookedDatesForService],
+    [liveBlockedDates, bookedDatesForService],
   )
+
+  // When the customer switches room, reset any date selection so stale dates
+  // from a different room's availability don't carry over.
+  const handleSelectService = (service: Item) => {
+    if (service.id !== selectedService?.id) {
+      setCheckIn('')
+      setCheckOut('')
+    }
+    setSelectedService(service)
+  }
 
   const nights = useMemo(() => {
     if (!checkIn || !checkOut) return 0
@@ -255,7 +288,7 @@ export default function BookingClient({ vendor, categories, bookedDates = [] }: 
               vendor={vendor}
               services={services}
               selectedService={selectedService}
-              onSelectService={setSelectedService}
+              onSelectService={handleSelectService}
               checkIn={checkIn}
               checkOut={checkOut}
               onCheckIn={setCheckIn}
@@ -286,7 +319,7 @@ export default function BookingClient({ vendor, categories, bookedDates = [] }: 
           item={previewItem}
           onClose={() => setPreviewItem(null)}
           onBook={() => {
-            setSelectedService(previewItem)
+            handleSelectService(previewItem)
             setPreviewItem(null)
             setDrawerOpen(true)
           }}
@@ -346,7 +379,7 @@ export default function BookingClient({ vendor, categories, bookedDates = [] }: 
                 vendor={vendor}
                 services={services}
                 selectedService={selectedService}
-                onSelectService={setSelectedService}
+                onSelectService={handleSelectService}
                 checkIn={checkIn}
                 checkOut={checkOut}
                 onCheckIn={setCheckIn}
@@ -617,9 +650,14 @@ function BookingWidget({
       </div>
 
       <div className="p-5 space-y-4">
-        {/* Service selector */}
+        {/* Step 1 — Service selector */}
         <div>
-          <label className="block text-xs font-semibold text-ink mb-1.5">Service / Room</label>
+          <label className="block text-xs font-semibold text-ink mb-1.5">
+            <span className="inline-flex items-center gap-1.5">
+              <span className="w-4 h-4 rounded-full bg-brand text-white text-[9px] font-black flex items-center justify-center shrink-0">1</span>
+              Choose a room or service
+            </span>
+          </label>
           <select
             value={selectedService?.id ?? ''}
             onChange={(e) => {
@@ -628,24 +666,36 @@ function BookingWidget({
             }}
             className={inputCls}
           >
-            {services.length === 0 && <option value="">No services available</option>}
+            <option value="" disabled>Select a room / service…</option>
+            {services.length === 0 && <option value="" disabled>No services available</option>}
             {services.map((s) => (
               <option key={s.id} value={s.id}>{s.name} — RM {s.price.toFixed(2)}/night</option>
             ))}
           </select>
         </div>
 
-        {/* Date picker */}
+        {/* Step 2 — Date picker (only shown after a room is selected) */}
         <div>
-          <label className="block text-xs font-semibold text-ink mb-1.5">Dates</label>
-          <DateRangePicker
-            checkIn={checkIn}
-            checkOut={checkOut}
-            onCheckIn={onCheckIn}
-            onCheckOut={onCheckOut}
-            today={today}
-            blockedDates={unavailableDates}  // vendor-blocked + already-booked
-          />
+          <label className="block text-xs font-semibold text-ink mb-1.5">
+            <span className="inline-flex items-center gap-1.5">
+              <span className={`w-4 h-4 rounded-full text-[9px] font-black flex items-center justify-center shrink-0 ${selectedService ? 'bg-brand text-white' : 'bg-border text-fog'}`}>2</span>
+              Pick your dates
+            </span>
+          </label>
+          {selectedService ? (
+            <DateRangePicker
+              checkIn={checkIn}
+              checkOut={checkOut}
+              onCheckIn={onCheckIn}
+              onCheckOut={onCheckOut}
+              today={today}
+              blockedDates={unavailableDates}
+            />
+          ) : (
+            <div className="border-2 border-dashed border-border rounded-xl py-6 px-4 text-center">
+              <p className="text-sm text-fog">Select a room above to see available dates</p>
+            </div>
+          )}
         </div>
 
         {/* Night count */}
