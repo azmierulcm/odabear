@@ -41,6 +41,7 @@ export type Item = {
   image_urls: string[]
   is_available: boolean
   sort_order: number
+  blocked_dates: string[]   // per-room blocked dates (distinct from vendor-level)
 }
 
 export type CategoryWithItems = Category & { items: Item[] }

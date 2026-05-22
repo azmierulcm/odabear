@@ -79,10 +79,10 @@ export default function BookingClient({ vendor, categories, bookings = [] }: Pro
     return dates
   }, [selectedService, bookings])
 
-  // All unavailable dates = vendor-blocked (all rooms) + already-booked (this room)
+  // All unavailable dates = vendor-blocked (all rooms) + room-blocked (this room) + already-booked (this room)
   const unavailableDates = useMemo(
-    () => [...liveBlockedDates, ...bookedDatesForService],
-    [liveBlockedDates, bookedDatesForService],
+    () => [...liveBlockedDates, ...(selectedService?.blocked_dates ?? []), ...bookedDatesForService],
+    [liveBlockedDates, selectedService, bookedDatesForService],
   )
 
   // When the customer switches room, reset any date selection so stale dates

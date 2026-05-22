@@ -93,7 +93,13 @@ export default function DashboardClient({ userId, vendor: initialVendor, initial
       {tab === 'rooms' && !vendor && <SetupPrompt onGoToProfile={() => setTab('profile')} />}
 
       {tab === 'main' && businessType === 'booking' && vendor && (
-        <AvailabilityTab vendor={vendor} onVendorUpdate={setVendor} supabase={supabase} />
+        <AvailabilityTab
+          vendor={vendor}
+          onVendorUpdate={setVendor}
+          supabase={supabase}
+          items={items}
+          onItemUpdate={(updated) => setItems((prev) => prev.map((i) => i.id === updated.id ? updated : i))}
+        />
       )}
       {tab === 'main' && businessType !== 'booking' && vendor && (
         <MenuTab userId={userId} vendor={vendor} categories={categories} items={items} businessType={businessType} onChanged={() => refreshData(vendor.id)} supabase={supabase} />
@@ -874,10 +880,12 @@ function ItemsTab({ userId, vendor, categories, items, itemLabel, isBooking, onC
 
 // ─── Availability Tab (booking type) ─────────────────────────
 
-function AvailabilityTab({ vendor, onVendorUpdate, supabase }: {
+function AvailabilityTab({ vendor, onVendorUpdate, supabase, items, onItemUpdate }: {
   vendor: Vendor
   onVendorUpdate: (v: Vendor) => void
   supabase: ReturnType<typeof createClient>
+  items: Item[]
+  onItemUpdate: (item: Item) => void
 }) {
   const [bookings, setBookings]         = useState<Booking[]>([])
   const [blockedDates, setBlockedDates] = useState<string[]>(vendor.blocked_dates ?? [])
@@ -886,6 +894,13 @@ function AvailabilityTab({ vendor, onVendorUpdate, supabase }: {
   })
   const [newBlock, setNewBlock] = useState('')
   const [loading, setLoading]  = useState(true)
+
+  // Per-room blocking state
+  const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null)
+  const [roomMonth, setRoomMonth] = useState(() => {
+    const d = new Date(); d.setDate(1); return d
+  })
+  const [newRoomBlock, setNewRoomBlock] = useState('')
 
   useEffect(() => {
     const load = async () => {
@@ -959,6 +974,55 @@ function AvailabilityTab({ vendor, onVendorUpdate, supabase }: {
   const upcomingBookings = bookings.filter((b) => b.end_date >= today && b.status !== 'cancelled')
     .sort((a, b) => a.start_date.localeCompare(b.start_date))
 
+  // ── Per-room helpers ────────────────────────────────────────
+
+  const selectedRoom = items.find((i) => i.id === selectedRoomId) ?? null
+
+  // Booked dates map for the selected room only
+  const roomBookedDateMap = useMemo(() => {
+    if (!selectedRoom) return {} as Record<string, BookingStatus>
+    const map: Record<string, BookingStatus> = {}
+    bookings
+      .filter((b) => b.status !== 'cancelled' && b.service_name === selectedRoom.name)
+      .forEach((b) => {
+        const start = new Date(b.start_date)
+        const end   = new Date(b.end_date)
+        for (const d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+          const key = d.toISOString().split('T')[0]
+          if (map[key] !== 'confirmed') map[key] = b.status
+        }
+      })
+    return map
+  }, [selectedRoom, bookings])
+
+  const roomBlockedSet = new Set(selectedRoom?.blocked_dates ?? [])
+
+  const toggleRoomBlock = async (dateStr: string) => {
+    if (!selectedRoom) return
+    const prev = selectedRoom.blocked_dates ?? []
+    const next = prev.includes(dateStr)
+      ? prev.filter((d) => d !== dateStr)
+      : [...prev, dateStr]
+    // Optimistic update
+    onItemUpdate({ ...selectedRoom, blocked_dates: next })
+    const { data, error } = await supabase
+      .from('items').update({ blocked_dates: next }).eq('id', selectedRoom.id).select().single()
+    if (error) onItemUpdate({ ...selectedRoom, blocked_dates: prev }) // rollback
+    else if (data) onItemUpdate(data as Item)
+  }
+
+  const addRoomBlock = async () => {
+    if (!newRoomBlock || roomBlockedSet.has(newRoomBlock)) return
+    await toggleRoomBlock(newRoomBlock)
+    setNewRoomBlock('')
+  }
+
+  const roomYear  = roomMonth.getFullYear()
+  const roomMon   = roomMonth.getMonth()
+  const roomFirstDow   = new Date(roomYear, roomMon, 1).getDay()
+  const roomDaysInMonth = new Date(roomYear, roomMon + 1, 0).getDate()
+  const roomMonthLabel  = roomMonth.toLocaleString('default', { month: 'long', year: 'numeric' })
+
   return (
     <div className="space-y-6">
       {/* Calendar card */}
@@ -1021,6 +1085,128 @@ function AvailabilityTab({ vendor, onVendorUpdate, supabase }: {
             <button onClick={addBlock} disabled={!newBlock} className={btnSmall}>Block</button>
           </div>
         </div>
+      </div>
+
+      {/* ── Per-room date blocking ─────────────────────────────── */}
+      <div className="bg-white rounded-2xl border border-border p-6 space-y-4">
+        <div>
+          <h2 className="text-base font-semibold text-ink">Block Dates Per Room</h2>
+          <p className="text-xs text-fog mt-1">
+            Block specific dates for individual rooms. Use the calendar above to close <em>all</em> rooms at once.
+          </p>
+        </div>
+
+        {items.length === 0 ? (
+          <p className="text-sm text-fog py-4 text-center">No rooms or services added yet. Go to the Rooms &amp; Services tab to add them first.</p>
+        ) : (
+          <>
+            {/* Room selector */}
+            <div className="flex flex-wrap gap-2">
+              {items.map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => { setSelectedRoomId(item.id); setRoomMonth(new Date(new Date().getFullYear(), new Date().getMonth(), 1)) }}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors border ${
+                    selectedRoomId === item.id
+                      ? 'bg-ink text-white border-ink'
+                      : 'bg-surface text-fog border-border hover:text-ink hover:border-ink'
+                  }`}
+                >
+                  {item.name}
+                  {(item.blocked_dates?.length ?? 0) > 0 && (
+                    <span className="ml-1.5 bg-brand/20 text-brand rounded-full px-1.5 py-0.5 text-[9px] font-black">
+                      {item.blocked_dates.length}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+
+            {!selectedRoom && (
+              <p className="text-sm text-fog text-center py-4 border-2 border-dashed border-border rounded-xl">
+                Select a room above to manage its blocked dates
+              </p>
+            )}
+
+            {selectedRoom && (
+              <div className="space-y-4">
+                {/* Legend */}
+                <div className="flex flex-wrap gap-4 text-xs text-fog">
+                  <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-yellow-100 border border-yellow-300" />Pending</span>
+                  <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-brand/20 border border-brand/30" />Confirmed</span>
+                  <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-surface border border-border" />Blocked</span>
+                </div>
+
+                {/* Month nav */}
+                <div className="flex items-center justify-between">
+                  <button onClick={() => setRoomMonth(new Date(roomYear, roomMon - 1, 1))}
+                    className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-surface text-fog hover:text-ink transition-colors text-lg">‹</button>
+                  <span className="text-sm font-semibold text-ink">{roomMonthLabel}</span>
+                  <button onClick={() => setRoomMonth(new Date(roomYear, roomMon + 1, 1))}
+                    className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-surface text-fog hover:text-ink transition-colors text-lg">›</button>
+                </div>
+
+                {/* Calendar grid */}
+                <div className="grid grid-cols-7 gap-px">
+                  {['Su','Mo','Tu','We','Th','Fr','Sa'].map((d) => (
+                    <div key={d} className="text-center text-xs font-semibold text-fog py-2">{d}</div>
+                  ))}
+                  {Array.from({ length: roomFirstDow }).map((_, i) => <div key={`re${i}`} />)}
+                  {Array.from({ length: roomDaysInMonth }).map((_, i) => {
+                    const day     = i + 1
+                    const dateStr = `${roomYear}-${String(roomMon + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+                    const booked  = roomBookedDateMap[dateStr]
+                    const blocked = roomBlockedSet.has(dateStr)
+                    const isToday = dateStr === today
+
+                    let bg = 'hover:bg-surface'
+                    if (booked === 'confirmed') bg = 'bg-brand/20'
+                    else if (booked === 'pending') bg = 'bg-yellow-100'
+                    else if (blocked) bg = 'bg-surface'
+
+                    return (
+                      <button
+                        key={dateStr}
+                        onClick={() => !booked && toggleRoomBlock(dateStr)}
+                        title={booked ? 'Booked — cannot block' : blocked ? 'Click to unblock' : 'Click to block'}
+                        className={`relative aspect-square flex items-center justify-center text-xs rounded-lg transition-colors ${bg} ${booked ? 'cursor-default' : 'cursor-pointer'}`}
+                      >
+                        <span className={`${isToday ? 'font-bold text-brand' : blocked && !booked ? 'line-through text-fog' : 'text-ink'}`}>
+                          {day}
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+
+                {/* Date input shortcut */}
+                <div className="pt-2 border-t border-border">
+                  <p className="text-xs font-semibold text-fog mb-2">Block a date (click calendar, or pick below)</p>
+                  <div className="flex items-center gap-2">
+                    <input type="date" value={newRoomBlock} onChange={(e) => setNewRoomBlock(e.target.value)}
+                      min={today} className={`${inputCls} flex-1`} />
+                    <button onClick={addRoomBlock} disabled={!newRoomBlock} className={btnSmall}>Block</button>
+                  </div>
+                </div>
+
+                {/* Blocked dates list */}
+                {(selectedRoom.blocked_dates?.length ?? 0) > 0 && (
+                  <div className="pt-2 border-t border-border">
+                    <p className="text-xs font-semibold text-fog mb-2">Currently blocked for {selectedRoom.name}</p>
+                    <div className="flex flex-wrap gap-2">
+                      {[...(selectedRoom.blocked_dates ?? [])].sort().map((d) => (
+                        <span key={d} className="flex items-center gap-1 bg-surface border border-border rounded-lg px-2.5 py-1 text-xs text-fog">
+                          {d}
+                          <button onClick={() => toggleRoomBlock(d)} className="ml-1 text-fog hover:text-brand font-bold text-xs leading-none">×</button>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </>
+        )}
       </div>
 
       {/* Upcoming bookings */}
