@@ -1255,125 +1255,357 @@ function AvailabilityTab({ vendor, onVendorUpdate, supabase, items, onItemUpdate
   )
 }
 
-// ─── Bookings Tab (booking vendor orders list) ────────────────
+// ─── Bookings Tab — Pipeline View ────────────────────────────
+
+type StageKey = 'pending' | 'holding' | 'cleared' | 'completed'
+
+const STAGES: {
+  key: StageKey
+  label: string
+  description: string
+  activeCls: string
+  dotCls: string
+  emptyMsg: string
+}[] = [
+  { key: 'pending',   label: 'New',       description: 'Awaiting your action',        activeCls: 'bg-brand text-white border-brand',                dotCls: 'bg-brand',      emptyMsg: "All clear — no new requests!" },
+  { key: 'holding',   label: 'Holding',   description: 'Approved, awaiting payment',  activeCls: 'bg-yellow-400 text-yellow-900 border-yellow-400', dotCls: 'bg-yellow-400', emptyMsg: 'No bookings in holding.' },
+  { key: 'cleared',   label: 'Cleared',   description: 'Paid — ready for check-in',   activeCls: 'bg-green-500 text-white border-green-500',        dotCls: 'bg-green-500',  emptyMsg: 'No cleared bookings.' },
+  { key: 'completed', label: 'Completed', description: 'Checked out & archived',       activeCls: 'bg-ink text-white border-ink',                    dotCls: 'bg-ink',        emptyMsg: 'No completed bookings yet.' },
+]
 
 function BookingsTab({ vendor, supabase }: {
   vendor: Vendor
   supabase: ReturnType<typeof createClient>
 }) {
-  const [bookings, setBookings] = useState<Booking[]>([])
-  const [loading, setLoading]   = useState(true)
-  const [fetchError, setFetchError] = useState<string | null>(null)
+  const [bookings, setBookings]   = useState<Booking[]>([])
+  const [loading, setLoading]     = useState(true)
+  const [stage, setStage]         = useState<StageKey>('pending')
+  const [selected, setSelected]   = useState<Booking | null>(null)
+  const [search, setSearch]       = useState('')
+  const [logInput, setLogInput]   = useState('')
+  const [logSaving, setLogSaving] = useState(false)
 
   useEffect(() => {
     const load = async () => {
-      const { data, error } = await supabase.from('bookings').select('*').eq('vendor_id', vendor.id).order('created_at', { ascending: false })
-      if (error) { setFetchError(error.message); setLoading(false); return }
+      const { data } = await supabase.from('bookings').select('*')
+        .eq('vendor_id', vendor.id).order('created_at', { ascending: false })
       setBookings((data ?? []) as Booking[])
       setLoading(false)
     }
     load()
 
-    const channel = supabase.channel(`bookings-all:${vendor.id}`)
+    const channel = supabase.channel(`bookings-pipeline:${vendor.id}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'bookings', filter: `vendor_id=eq.${vendor.id}` },
-        (payload) => setBookings((prev) => [payload.new as Booking, ...prev]))
+        (p) => setBookings(prev => [p.new as Booking, ...prev]))
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'bookings', filter: `vendor_id=eq.${vendor.id}` },
-        (payload) => setBookings((prev) => prev.map((b) => b.id === (payload.new as Booking).id ? payload.new as Booking : b)))
+        (p) => {
+          const upd = p.new as Booking
+          setBookings(prev => prev.map(b => b.id === upd.id ? upd : b))
+          setSelected(prev => prev?.id === upd.id ? upd : prev)
+        })
       .subscribe()
 
     return () => { supabase.removeChannel(channel) }
   }, [vendor.id, supabase])
 
-  const updateStatus = async (id: string, status: BookingStatus) => {
-    const snapshot = bookings.find((b) => b.id === id)
-    setBookings((prev) => prev.map((b) => b.id === id ? { ...b, status } : b))
-    const { error } = await supabase.from('bookings').update({ status }).eq('id', id)
-    if (error && snapshot) {
-      // Rollback optimistic update on failure
-      setBookings((prev) => prev.map((b) => b.id === id ? snapshot : b))
+  // Map legacy 'confirmed' → 'holding' so old bookings show correctly
+  const stageOf = (b: Booking): StageKey | 'cancelled' => {
+    if (b.status === 'confirmed') return 'holding'
+    if (['pending','holding','cleared','completed'].includes(b.status)) return b.status as StageKey
+    return 'cancelled'
+  }
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    if (!q) return bookings
+    return bookings.filter(b =>
+      (b.short_booking_id ?? '').toLowerCase().includes(q) ||
+      b.customer_name.toLowerCase().includes(q) ||
+      (b.customer_phone ?? '').includes(q) ||
+      (b.service_name ?? '').toLowerCase().includes(q)
+    )
+  }, [bookings, search])
+
+  const buckets = useMemo(() => {
+    const out: Record<StageKey, Booking[]> = { pending: [], holding: [], cleared: [], completed: [] }
+    filtered.forEach(b => { const s = stageOf(b); if (s !== 'cancelled') out[s].push(b) })
+    return out
+  }, [filtered]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const moveStage = async (id: string, newStatus: string) => {
+    const snap = bookings.find(b => b.id === id)
+    setBookings(prev => prev.map(b => b.id === id ? { ...b, status: newStatus as BookingStatus } : b))
+    setSelected(prev => prev?.id === id ? { ...prev, status: newStatus as BookingStatus } : prev)
+    const { error } = await supabase.from('bookings').update({ status: newStatus }).eq('id', id)
+    if (error && snap) {
+      setBookings(prev => prev.map(b => b.id === id ? snap : b))
+      setSelected(prev => prev?.id === id ? snap : prev)
     }
   }
 
+  const addLog = async () => {
+    if (!logInput.trim() || !selected) return
+    setLogSaving(true)
+    const entry = { text: logInput.trim(), ts: new Date().toISOString() }
+    const newLog = [...(selected.staff_log ?? []), entry]
+    const upd = { ...selected, staff_log: newLog }
+    setSelected(upd)
+    setBookings(prev => prev.map(b => b.id === selected.id ? upd : b))
+    await supabase.from('bookings').update({ staff_log: newLog }).eq('id', selected.id)
+    setLogInput('')
+    setLogSaving(false)
+  }
+
+  const nightsOf = (b: Booking) =>
+    Math.max(1, Math.round((new Date(b.end_date).getTime() - new Date(b.start_date).getTime()) / 86400000))
+
   if (loading) return <div className="text-sm text-fog text-center py-16">Loading…</div>
 
-  if (fetchError) {
-    return (
-      <div className="bg-red-50 border border-red-100 rounded-2xl p-6 text-center">
-        <p className="text-sm font-semibold text-brand mb-1">Could not load bookings</p>
-        <p className="text-xs text-fog">{fetchError}</p>
-      </div>
-    )
-  }
-
-  if (bookings.length === 0) {
-    return (
-      <div className="bg-white rounded-2xl border border-border p-16 text-center">
-        <p className="text-2xl mb-3">📅</p>
-        <p className="font-semibold text-ink mb-1">No bookings yet</p>
-        <p className="text-sm text-fog">Reservation requests will appear here in real-time.</p>
-      </div>
-    )
-  }
-
-  const BOOKING_STATUS: Record<BookingStatus, { label: string; bg: string; text: string }> = {
-    pending:   { label: 'Pending',   bg: 'bg-yellow-50', text: 'text-yellow-700' },
-    confirmed: { label: 'Confirmed', bg: 'bg-green-50',  text: 'text-green-700'  },
-    cancelled: { label: 'Cancelled', bg: 'bg-surface',   text: 'text-fog'        },
-  }
+  const currentStage = STAGES.find(s => s.key === stage)!
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-fog">{bookings.length} booking{bookings.length !== 1 ? 's' : ''} total</p>
-        <span className="flex items-center gap-1.5 text-xs font-semibold text-green-700">
-          <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />Live
-        </span>
+
+      {/* ── Search ───────────────────────────────────────────────── */}
+      <div className="relative">
+        <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-fog">🔍</span>
+        <input
+          type="text" value={search} onChange={e => setSearch(e.target.value)}
+          placeholder="Search by booking ID, name, phone or room…"
+          className={`${inputCls} pl-9`}
+        />
+        {search && (
+          <button onClick={() => setSearch('')}
+            className="absolute right-3.5 top-1/2 -translate-y-1/2 text-fog hover:text-ink text-xl leading-none">×</button>
+        )}
       </div>
-      {bookings.map((b) => {
-        const nights = Math.round((new Date(b.end_date).getTime() - new Date(b.start_date).getTime()) / 86400000)
-        const cfg = BOOKING_STATUS[b.status] ?? BOOKING_STATUS.pending
-        return (
-          <div key={b.id} className="bg-white rounded-2xl border border-border p-5 space-y-3">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <div className="flex items-center gap-2 mb-0.5">
-                  <p className="font-bold text-ink">{b.customer_name}</p>
-                  <span className="text-xs font-mono font-semibold text-fog bg-surface px-1.5 py-0.5 rounded">
-                    {b.short_booking_id ?? `BKG-${b.id.slice(-4).toUpperCase()}`}
-                  </span>
+
+      {/* ── Pipeline tabs ─────────────────────────────────────────── */}
+      <div className="flex gap-2 overflow-x-auto pb-1">
+        {STAGES.map(s => (
+          <button key={s.key} onClick={() => setStage(s.key)}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border text-xs font-semibold whitespace-nowrap transition-all shrink-0 ${
+              stage === s.key ? s.activeCls : 'bg-white border-border text-fog hover:text-ink hover:border-ink'
+            }`}
+          >
+            {s.key === 'pending' && buckets.pending.length > 0 && (
+              <span className={`w-2 h-2 rounded-full animate-pulse ${stage === s.key ? 'bg-white' : s.dotCls}`} />
+            )}
+            {s.label}
+            {buckets[s.key].length > 0 && (
+              <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${stage === s.key ? 'bg-white/25' : 'bg-surface'}`}>
+                {buckets[s.key].length}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* Stage description */}
+      <p className="text-xs text-fog">{currentStage.description}</p>
+
+      {/* ── Booking cards ─────────────────────────────────────────── */}
+      {buckets[stage].length === 0 ? (
+        <div className="bg-white rounded-2xl border border-border p-14 text-center space-y-2">
+          <p className="text-3xl">{stage === 'pending' ? '🎉' : '📋'}</p>
+          <p className="font-semibold text-ink">{currentStage.emptyMsg}</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {buckets[stage].map(b => (
+            <button key={b.id} onClick={() => setSelected(b)}
+              className="w-full text-left bg-white rounded-2xl border border-border p-4 hover:border-ink hover:shadow-sm transition-all space-y-2.5"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-2">
+                  {stage === 'pending' && (
+                    <span className="mt-0.5 shrink-0 bg-brand text-white text-[9px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-wide">New</span>
+                  )}
+                  <div>
+                    <p className="font-bold text-ink text-sm">{b.customer_name}</p>
+                    <p className="text-[10px] font-mono text-fog mt-0.5">{b.short_booking_id ?? '—'}</p>
+                  </div>
                 </div>
-                {b.customer_phone && <p className="text-xs text-fog mt-0.5">{b.customer_phone}</p>}
-                {b.service_name && <p className="text-xs text-brand font-semibold mt-0.5">{b.service_name}</p>}
+                <div className="text-right shrink-0">
+                  <p className="text-xs font-semibold text-ink">{b.service_name}</p>
+                  <p className="text-[10px] text-fog mt-0.5">{nightsOf(b)} night{nightsOf(b) !== 1 ? 's' : ''}</p>
+                </div>
               </div>
-              <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${cfg.bg} ${cfg.text}`}>{cfg.label}</span>
-            </div>
-            <div className="flex items-center gap-3 text-sm text-ink">
-              <span>📅 {b.start_date}</span>
-              <span className="text-fog">→</span>
-              <span>{b.end_date}</span>
-              <span className="text-xs text-fog">({nights} night{nights !== 1 ? 's' : ''})</span>
-            </div>
-            {b.notes && <p className="text-xs text-fog italic">"{b.notes}"</p>}
-            <p className="text-xs text-fog">Requested {timeAgo(b.created_at)}</p>
-            {b.status === 'pending' && (
-              <div className="flex gap-3 pt-1">
-                <button onClick={() => updateStatus(b.id, 'confirmed')}
-                  className="flex-1 bg-gradient-to-r from-brand-dark to-brand text-white font-semibold rounded-xl py-2.5 text-sm hover:opacity-90 transition-opacity">
-                  Confirm
-                </button>
-                <button onClick={() => updateStatus(b.id, 'cancelled')}
-                  className="flex-1 border border-border text-fog font-semibold rounded-xl py-2.5 text-sm hover:border-ink hover:text-ink transition-colors">
-                  Decline
-                </button>
+              <div className="flex items-center gap-2 text-xs text-fog">
+                <span>📅 {b.start_date}</span>
+                <span>→</span>
+                <span>{b.end_date}</span>
+                <span className="ml-auto text-[10px]">{timeAgo(b.created_at)}</span>
               </div>
-            )}
-            {b.status === 'confirmed' && (
-              <button onClick={() => updateStatus(b.id, 'cancelled')}
-                className="text-xs font-semibold text-fog underline underline-offset-2">Cancel booking</button>
-            )}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* ── Detail panel ──────────────────────────────────────────── */}
+      {selected && (
+        <div className="fixed inset-0 z-50 flex items-end lg:items-center justify-center">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setSelected(null)} />
+          <div className="relative z-10 w-full lg:max-w-2xl bg-white rounded-t-3xl lg:rounded-3xl shadow-2xl max-h-[92vh] flex flex-col overflow-hidden">
+
+            {/* Drag handle (mobile) */}
+            <div className="flex justify-center pt-3 pb-1 shrink-0 lg:hidden">
+              <div className="w-10 h-1 rounded-full bg-border" />
+            </div>
+
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
+              <div>
+                <p className="font-bold text-ink">{selected.customer_name}</p>
+                <p className="text-xs font-mono text-fog">{selected.short_booking_id ?? '—'}</p>
+              </div>
+              <button onClick={() => setSelected(null)}
+                className="w-8 h-8 rounded-full bg-surface flex items-center justify-center text-fog hover:text-ink text-xl leading-none">×</button>
+            </div>
+
+            <div className="overflow-y-auto flex-1 px-6 py-5 space-y-7">
+
+              {/* ── Zone A: Basic Specs ─────────────────────────── */}
+              <section className="space-y-3">
+                <p className="text-[10px] font-black text-fog uppercase tracking-widest">Zone A — Basic Specs</p>
+
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { label: 'Guest',     value: selected.customer_name },
+                    { label: 'Phone',     value: selected.customer_phone || '—' },
+                    { label: 'Room',      value: selected.service_name || '—' },
+                    { label: 'Duration',  value: `${nightsOf(selected)} night${nightsOf(selected) !== 1 ? 's' : ''}` },
+                    { label: 'Check-in',  value: selected.start_date },
+                    { label: 'Check-out', value: selected.end_date },
+                  ].map(({ label, value }) => (
+                    <div key={label} className="bg-surface rounded-xl p-3">
+                      <p className="text-[10px] font-bold text-fog uppercase tracking-wide mb-0.5">{label}</p>
+                      <p className="text-sm font-semibold text-ink">{value}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Payment ledger */}
+                <div className="border border-border rounded-xl overflow-hidden">
+                  <div className="px-4 py-2 bg-surface border-b border-border">
+                    <p className="text-[10px] font-black text-fog uppercase tracking-widest">Payment Ledger</p>
+                  </div>
+                  <div className="divide-y divide-surface text-sm">
+                    <div className="flex justify-between px-4 py-2.5">
+                      <span className="text-fog">Nights</span>
+                      <span className="font-semibold text-ink">{nightsOf(selected)}</span>
+                    </div>
+                    <div className="flex justify-between px-4 py-2.5">
+                      <span className="text-fog">Payment status</span>
+                      <span className={`font-bold ${
+                        ['cleared','completed'].includes(stageOf(selected)) ? 'text-green-600' : 'text-yellow-600'
+                      }`}>
+                        {['cleared','completed'].includes(stageOf(selected)) ? '✓ Paid' : 'Awaiting payment'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              {/* ── Zone B: Guest Requests ──────────────────────── */}
+              <section className="space-y-3">
+                <p className="text-[10px] font-black text-fog uppercase tracking-widest">Zone B — Guest Requests</p>
+                {selected.notes ? (
+                  <div className="bg-surface rounded-xl p-4 space-y-2">
+                    {selected.notes.split(/\n|,|;/).map(r => r.trim()).filter(Boolean).map((req, i) => (
+                      <div key={i} className="flex items-start gap-3 text-sm">
+                        <span className="w-5 h-5 rounded border-2 border-border mt-0.5 shrink-0 flex items-center justify-center text-[10px] text-fog">
+                          {stageOf(selected) === 'completed' ? '✓' : ''}
+                        </span>
+                        <span className="text-ink">{req}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-fog italic">No special requests.</p>
+                )}
+              </section>
+
+              {/* ── Zone C: Staff Logbook ───────────────────────── */}
+              <section className="space-y-3">
+                <p className="text-[10px] font-black text-fog uppercase tracking-widest">Zone C — Staff Logbook</p>
+
+                {(selected.staff_log ?? []).length === 0 ? (
+                  <p className="text-sm text-fog italic">No log entries yet.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {[...(selected.staff_log ?? [])].reverse().map((entry, i) => (
+                      <div key={i} className="bg-surface rounded-xl px-4 py-3 space-y-1">
+                        <p className="text-[10px] font-semibold text-fog">
+                          {new Date(entry.ts).toLocaleString('en-MY', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                        </p>
+                        <p className="text-sm text-ink">{entry.text}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <textarea
+                    value={logInput} onChange={e => setLogInput(e.target.value)}
+                    placeholder="Add a handover note, payment update, or staff message…"
+                    rows={2} className={`${inputCls} resize-none`}
+                  />
+                  <button onClick={addLog} disabled={!logInput.trim() || logSaving} className={`${btnSmall} disabled:opacity-50`}>
+                    {logSaving ? 'Saving…' : '+ Add to Logbook'}
+                  </button>
+                </div>
+              </section>
+
+              {/* ── Pipeline Actions ────────────────────────────── */}
+              <section className="space-y-2 pt-1 border-t border-border">
+                <p className="text-[10px] font-black text-fog uppercase tracking-widest pb-1">Move Stage</p>
+
+                {stageOf(selected) === 'pending' && <>
+                  <button onClick={() => moveStage(selected.id, 'holding')}
+                    className="w-full bg-yellow-400 text-yellow-900 font-semibold rounded-xl py-3 text-sm hover:opacity-90 transition-opacity">
+                    Approve → Holding (Awaiting Payment)
+                  </button>
+                  <button onClick={() => moveStage(selected.id, 'cancelled')}
+                    className="w-full border border-border text-fog font-semibold rounded-xl py-2.5 text-sm hover:border-brand hover:text-brand transition-colors">
+                    Decline Booking
+                  </button>
+                </>}
+
+                {stageOf(selected) === 'holding' && <>
+                  <button onClick={() => moveStage(selected.id, 'cleared')}
+                    className="w-full bg-green-500 text-white font-semibold rounded-xl py-3 text-sm hover:opacity-90 transition-opacity">
+                    Payment Received → Cleared ✓
+                  </button>
+                  <button onClick={() => moveStage(selected.id, 'cancelled')}
+                    className="w-full border border-border text-fog font-semibold rounded-xl py-2.5 text-sm hover:border-brand hover:text-brand transition-colors">
+                    Cancel Booking
+                  </button>
+                </>}
+
+                {stageOf(selected) === 'cleared' && <>
+                  <button onClick={() => moveStage(selected.id, 'completed')}
+                    className="w-full bg-ink text-white font-semibold rounded-xl py-3 text-sm hover:opacity-90 transition-opacity">
+                    Guest Checked Out → Completed
+                  </button>
+                  <button onClick={() => moveStage(selected.id, 'holding')}
+                    className="w-full border border-border text-fog font-semibold rounded-xl py-2.5 text-sm hover:border-ink hover:text-ink transition-colors">
+                    Move back to Holding
+                  </button>
+                </>}
+
+                {stageOf(selected) === 'completed' && (
+                  <div className="bg-surface rounded-xl p-4 text-center">
+                    <p className="text-sm font-semibold text-ink">✓ Archived</p>
+                    <p className="text-xs text-fog mt-0.5">This booking is complete.</p>
+                  </div>
+                )}
+              </section>
+
+            </div>
           </div>
-        )
-      })}
+        </div>
+      )}
     </div>
   )
 }

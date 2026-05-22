@@ -75,7 +75,9 @@ export type Order = {
   created_at: string
 }
 
-export type BookingStatus = 'pending' | 'confirmed' | 'cancelled'
+export type BookingStatus = 'pending' | 'confirmed' | 'holding' | 'cleared' | 'completed' | 'cancelled'
+
+export type LogEntry = { text: string; ts: string }
 
 export type Booking = {
   id: string
@@ -89,4 +91,5 @@ export type Booking = {
   notes: string | null
   status: BookingStatus
   created_at: string
+  staff_log?: LogEntry[]
 }
