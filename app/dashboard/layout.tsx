@@ -33,7 +33,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
               href={`/${vendor.slug}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-sm font-semibold text-ink underline hidden sm:block"
+              className="text-sm font-semibold text-ink underline"
             >
               View listing ↗
             </a>
