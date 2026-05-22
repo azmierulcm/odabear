@@ -37,7 +37,29 @@ export default async function VendorMenuPage({
   if (!vendor.business_type) notFound()
 
   if (vendor.business_type === 'booking') {
-    return <BookingClient vendor={vendor as Vendor} categories={categories} />
+    const todayStr = new Date().toISOString().split('T')[0]
+
+    // Fetch non-cancelled bookings so the customer calendar can show
+    // already-booked dates as unavailable (same view as vendor calendar).
+    const { data: bookingData } = await supabase
+      .from('bookings')
+      .select('start_date, end_date')
+      .eq('vendor_id', vendor.id)
+      .neq('status', 'cancelled')
+      .gte('end_date', todayStr)
+
+    // Expand each booking's date range into individual YYYY-MM-DD strings.
+    const DAY = 86400000
+    const bookedDates: string[] = []
+    for (const b of bookingData ?? []) {
+      const startMs = new Date(b.start_date + 'T00:00:00Z').getTime()
+      const endMs   = new Date(b.end_date   + 'T00:00:00Z').getTime()
+      for (let ms = startMs; ms <= endMs; ms += DAY) {
+        bookedDates.push(new Date(ms).toISOString().split('T')[0])
+      }
+    }
+
+    return <BookingClient vendor={vendor as Vendor} categories={categories} bookedDates={bookedDates} />
   }
 
   return <MenuClient vendor={vendor as Vendor} categories={categories} />

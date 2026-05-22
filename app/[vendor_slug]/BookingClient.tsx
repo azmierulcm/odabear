@@ -1,12 +1,13 @@
 'use client'
 
-import { useState, useRef, useMemo } from 'react'
+import { useState, useRef, useMemo, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { Vendor, CategoryWithItems, Item } from '@/types/menu'
 
 interface Props {
   vendor: Vendor
   categories: CategoryWithItems[]
+  bookedDates?: string[]   // confirmed/pending booking dates from server
 }
 
 function makeShortBookingId(): string {
@@ -16,7 +17,7 @@ function makeShortBookingId(): string {
   return `BKG-${suffix}`
 }
 
-export default function BookingClient({ vendor, categories }: Props) {
+export default function BookingClient({ vendor, categories, bookedDates = [] }: Props) {
   const services = categories.flatMap((c) => c.items.filter((i) => i.is_available))
   const allItems  = categories.flatMap((c) => c.items)
 
@@ -32,6 +33,35 @@ export default function BookingClient({ vendor, categories }: Props) {
 
   const supabase = useMemo(() => createClient(), [])
 
+  // Live blocked_dates — initialised from SSR data, updated via realtime
+  const [liveBlockedDates, setLiveBlockedDates] = useState<string[]>(vendor.blocked_dates ?? [])
+
+  useEffect(() => {
+    // Subscribe to any UPDATE on this vendor row so that when the vendor
+    // blocks/unblocks a date in the dashboard, the customer calendar
+    // reflects it immediately without a page refresh.
+    const channel = supabase
+      .channel(`vendor-availability:${vendor.id}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'vendors', filter: `id=eq.${vendor.id}` },
+        (payload) => {
+          const updated = payload.new as Partial<Vendor>
+          if (Array.isArray(updated.blocked_dates)) {
+            setLiveBlockedDates(updated.blocked_dates)
+          }
+        },
+      )
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [vendor.id, supabase])
+
+  // All unavailable dates = vendor-blocked + already-confirmed-booked
+  const unavailableDates = useMemo(
+    () => [...liveBlockedDates, ...bookedDates],
+    [liveBlockedDates, bookedDates],
+  )
+
   const nights = useMemo(() => {
     if (!checkIn || !checkOut) return 0
     // Use UTC midnight to avoid DST shifting the result by ±1 day
@@ -40,7 +70,7 @@ export default function BookingClient({ vendor, categories }: Props) {
     return Math.max(0, Math.round((b - a) / 86400000))
   }, [checkIn, checkOut])
 
-  const blockedSet = useMemo(() => new Set(vendor.blocked_dates ?? []), [vendor.blocked_dates])
+  const blockedSet = useMemo(() => new Set(unavailableDates), [unavailableDates])
 
   const hasConflict = useMemo(() => {
     if (!checkIn || !checkOut || nights <= 0) return false
@@ -241,6 +271,7 @@ export default function BookingClient({ vendor, categories }: Props) {
               today={today}
               canRequest={canRequest}
               hasConflict={hasConflict}
+              unavailableDates={unavailableDates}
               onRequest={handleRequest}
               submitted={submitted}
               onReset={() => setSubmitted(false)}
@@ -331,6 +362,7 @@ export default function BookingClient({ vendor, categories }: Props) {
                 today={today}
                 canRequest={canRequest}
                 hasConflict={hasConflict}
+                unavailableDates={unavailableDates}
                 onRequest={handleRequest}
                 submitted={submitted}
                 onReset={() => setSubmitted(false)}
@@ -545,6 +577,7 @@ interface BookingWidgetProps {
   today: string
   canRequest: boolean
   hasConflict: boolean
+  unavailableDates: string[]
   onRequest: () => void
   submitted: boolean
   onReset: () => void
@@ -554,7 +587,7 @@ function BookingWidget({
   vendor, services, selectedService, onSelectService,
   checkIn, checkOut, onCheckIn, onCheckOut,
   guestName, onGuestName, guestPhone, onGuestPhone,
-  notes, onNotes, nights, total, today, canRequest, hasConflict, onRequest, submitted, onReset,
+  notes, onNotes, nights, total, today, canRequest, hasConflict, unavailableDates, onRequest, submitted, onReset,
 }: BookingWidgetProps) {
   if (submitted) {
     return (
@@ -611,7 +644,7 @@ function BookingWidget({
             onCheckIn={onCheckIn}
             onCheckOut={onCheckOut}
             today={today}
-            blockedDates={vendor.blocked_dates ?? []}
+            blockedDates={unavailableDates}  // vendor-blocked + already-booked
           />
         </div>
 
@@ -863,9 +896,13 @@ function DateRangePicker({
                 onClick={() => !disabled && handleDay(dateStr)}
                 className={[
                   'relative flex items-center justify-center h-9 select-none',
+                  // Range highlight (strip behind selected dates)
                   inRange ? 'bg-brand/10' : '',
                   isStart && checkOut ? 'rounded-l-full' : '',
                   isEnd ? 'rounded-r-full' : '',
+                  // Unavailable: fill the whole cell with a gray block,
+                  // exactly matching how the vendor dashboard shows blocked dates
+                  (isBlocked || isCutoff) && !isStart && !isEnd ? 'bg-surface rounded-xl' : '',
                 ].join(' ')}
               >
                 <div className={[
@@ -873,7 +910,7 @@ function DateRangePicker({
                   isStart || isEnd
                     ? 'bg-brand text-white font-semibold'
                     : isBlocked || isCutoff
-                    ? 'text-fog/50 line-through cursor-not-allowed'
+                    ? 'text-fog/40 line-through cursor-not-allowed select-none'
                     : isPast
                     ? 'text-fog/30 cursor-not-allowed'
                     : 'text-ink hover:bg-brand/15 cursor-pointer',
