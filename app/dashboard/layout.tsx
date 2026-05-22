@@ -10,7 +10,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   if (!user) redirect('/login')
 
-  // Fetch vendor slug for the "View menu" link
+  // Fetch vendor slug for the "View listing" link
   const { data: vendor } = await supabase
     .from('vendors')
     .select('slug')
@@ -35,7 +35,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
               rel="noopener noreferrer"
               className="text-sm font-semibold text-ink underline hidden sm:block"
             >
-              View menu ↗
+              View listing ↗
             </a>
           )}
           <LogoutButton />
