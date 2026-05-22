@@ -23,7 +23,8 @@ function AuthForm() {
   const [password, setPassword] = useState('')
   const [error, setError]     = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading]           = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
 
   // Support /login?mode=signup from register redirects
   useEffect(() => {
@@ -153,16 +154,37 @@ function AuthForm() {
                     </button>
                   )}
                 </div>
-                <input
-                  type="password"
-                  required
-                  minLength={mode === 'signup' ? 6 : undefined}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder={mode === 'signup' ? 'Min. 6 characters' : '••••••••'}
-                  className={inputCls}
-                  autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
-                />
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    required
+                    minLength={mode === 'signup' ? 6 : undefined}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder={mode === 'signup' ? 'Min. 6 characters' : '••••••••'}
+                    className={inputCls + ' pr-12'}
+                    autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(v => !v)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 text-fog hover:text-ink transition-colors rounded-lg"
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showPassword ? (
+                      /* Eye-off icon */
+                      <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 3l18 18M10.477 10.477A3 3 0 0013.5 13.5M6.228 6.228A10.45 10.45 0 003 12c1.657 4.243 5.686 7 9 7a10.44 10.44 0 005.772-1.771M9.878 9.878A3 3 0 0114.12 14.12M17.772 17.772A10.45 10.45 0 0021 12c-1.657-4.243-5.686-7-9-7a10.44 10.44 0 00-2.228.228" />
+                      </svg>
+                    ) : (
+                      /* Eye icon */
+                      <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
               </div>
             )}
 
