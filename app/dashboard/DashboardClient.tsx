@@ -897,7 +897,6 @@ function AvailabilityTab({ vendor, onVendorUpdate, supabase, items, onItemUpdate
   const [calMonth, setCalMonth] = useState(() => {
     const d = new Date(); d.setDate(1); return d
   })
-  const [newRoomBlock, setNewRoomBlock] = useState('')
 
   // Auto-select first room on mount / when items load
   useEffect(() => {
@@ -958,12 +957,6 @@ function AvailabilityTab({ vendor, onVendorUpdate, supabase, items, onItemUpdate
       .from('items').update({ blocked_dates: next }).eq('id', selectedRoom.id).select().single()
     if (error) onItemUpdate({ ...selectedRoom, blocked_dates: prev })
     else if (data) onItemUpdate(data as Item)
-  }
-
-  const addRoomBlock = async () => {
-    if (!newRoomBlock || roomBlockedSet.has(newRoomBlock)) return
-    await toggleRoomBlock(newRoomBlock)
-    setNewRoomBlock('')
   }
 
   // Vendor-level "close all rooms" toggle
@@ -1090,18 +1083,6 @@ function AvailabilityTab({ vendor, onVendorUpdate, supabase, items, onItemUpdate
                   </button>
                 )
               })}
-            </div>
-
-            {/* Date input shortcut */}
-            <div className="pt-3 border-t border-border">
-              <p className="text-xs font-semibold text-fog mb-2">
-                Tap a date on the calendar to block/unblock, or pick a date below:
-              </p>
-              <div className="flex items-center gap-2">
-                <input type="date" value={newRoomBlock} onChange={(e) => setNewRoomBlock(e.target.value)}
-                  min={today} className={`${inputCls} flex-1`} />
-                <button onClick={addRoomBlock} disabled={!newRoomBlock} className={btnSmall}>Block</button>
-              </div>
             </div>
 
             {/* Blocked dates pills */}
