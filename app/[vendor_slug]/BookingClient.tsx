@@ -224,6 +224,26 @@ export default function BookingClient({ vendor, categories, bookings = [] }: Pro
             </div>
           )}
 
+          {/* Service categories */}
+          {categories.map((cat) => (
+            <div key={cat.id}>
+              <h2 className="text-xl font-bold text-ink mb-4">{cat.name}</h2>
+              <div className="space-y-3">
+                {cat.items.map((item) => (
+                  <ServiceCard
+                    key={item.id}
+                    item={item}
+                    selected={selectedService?.id === item.id}
+                    onSelect={() => {
+                      if (!item.is_available) return
+                      setPreviewItem(item)
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+          ))}
+
           {(vendor.location_address || (vendor.location_lat && vendor.location_lng)) && (() => {
             const hasCoords = vendor.location_lat && vendor.location_lng
             const mapQuery  = hasCoords
@@ -233,7 +253,7 @@ export default function BookingClient({ vendor, categories, bookings = [] }: Pro
               ? `${vendor.location_lat},${vendor.location_lng}`
               : encodeURIComponent(vendor.location_address ?? '')
             return (
-              <div className="pb-8 border-b border-border space-y-3">
+              <div className="pt-2 border-t border-border space-y-3">
                 <h2 className="text-base font-semibold text-ink">📍 Location</h2>
                 {vendor.location_address && (
                   <p className="text-sm text-fog">{vendor.location_address}</p>
@@ -259,26 +279,6 @@ export default function BookingClient({ vendor, categories, bookings = [] }: Pro
               </div>
             )
           })()}
-
-          {/* Service categories */}
-          {categories.map((cat) => (
-            <div key={cat.id}>
-              <h2 className="text-xl font-bold text-ink mb-4">{cat.name}</h2>
-              <div className="space-y-3">
-                {cat.items.map((item) => (
-                  <ServiceCard
-                    key={item.id}
-                    item={item}
-                    selected={selectedService?.id === item.id}
-                    onSelect={() => {
-                      if (!item.is_available) return
-                      setPreviewItem(item)
-                    }}
-                  />
-                ))}
-              </div>
-            </div>
-          ))}
         </div>
 
         {/* Right: desktop booking widget */}

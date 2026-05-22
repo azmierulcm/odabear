@@ -278,6 +278,25 @@ function ProfileTab({ userId, vendor, businessType, onSaved, supabase }: {
         </div>
       )}
 
+      {vendor && (
+        <div className="bg-white rounded-2xl border border-border p-6">
+          <h2 className="text-base font-semibold text-ink mb-1">
+            {businessType === 'booking' ? 'Property photos' : 'Shop photos'}
+          </h2>
+          <p className="text-xs text-fog mb-5">Up to 5 photos shown as a hero gallery on your public page.</p>
+          <GalleryField
+            userId={userId}
+            vendorId={vendor.id}
+            urls={galleryUrls}
+            onChange={(urls) => {
+              setGalleryUrls(urls)
+              supabase.from('vendors').update({ gallery_urls: urls }).eq('id', vendor.id)
+            }}
+            supabase={supabase}
+          />
+        </div>
+      )}
+
       <div className="bg-white rounded-2xl border border-border p-6">
         <h2 className="text-base font-semibold text-ink mb-5">Business details</h2>
         <form
@@ -288,6 +307,16 @@ function ProfileTab({ userId, vendor, businessType, onSaved, supabase }: {
           }}
           className="space-y-4"
         >
+          <Field label="Logo" hint="Shown as your shop icon — square image works best">
+            <LogoUploadField
+              logoUrl={logoUrl}
+              uploading={logoUploading}
+              onUpload={handleLogoUpload}
+              onRemove={() => setLogoUrl('')}
+            />
+            {logoUploadError && <p className="text-xs text-brand mt-1">{logoUploadError}</p>}
+          </Field>
+
           <Field label="Business Name" required>
             <input type="text" required value={name} onChange={(e) => setName(e.target.value)}
               placeholder={businessType === 'booking' ? 'e.g. Tepi Pantai Chalet' : 'e.g. Demo Kopitiam'}
@@ -298,16 +327,6 @@ function ProfileTab({ userId, vendor, businessType, onSaved, supabase }: {
             <input type="text" required value={slug}
               onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))}
               placeholder="demo-kopitiam" className={inputCls} />
-          </Field>
-
-          <Field label="Logo" hint="Shown as your shop icon — square image works best">
-            <LogoUploadField
-              logoUrl={logoUrl}
-              uploading={logoUploading}
-              onUpload={handleLogoUpload}
-              onRemove={() => setLogoUrl('')}
-            />
-            {logoUploadError && <p className="text-xs text-brand mt-1">{logoUploadError}</p>}
           </Field>
 
           <Field label="Description" hint="Shown on your public page">
@@ -374,24 +393,6 @@ function ProfileTab({ userId, vendor, businessType, onSaved, supabase }: {
         )}
       </div>
 
-      {vendor && (
-        <div className="bg-white rounded-2xl border border-border p-6">
-          <h2 className="text-base font-semibold text-ink mb-1">
-            {businessType === 'booking' ? 'Property photos' : 'Shop photos'}
-          </h2>
-          <p className="text-xs text-fog mb-5">Up to 5 photos shown as a hero gallery on your public page.</p>
-          <GalleryField
-            userId={userId}
-            vendorId={vendor.id}
-            urls={galleryUrls}
-            onChange={(urls) => {
-              setGalleryUrls(urls)
-              supabase.from('vendors').update({ gallery_urls: urls }).eq('id', vendor.id)
-            }}
-            supabase={supabase}
-          />
-        </div>
-      )}
     </div>
   )
 }
@@ -880,6 +881,14 @@ function ItemsTab({ userId, vendor, categories, items, itemLabel, isBooking, onC
 
 // ─── Availability Tab (booking type) ─────────────────────────
 
+const CLOSE_ALL = '__all__'
+
+// Format "2026-06-17" → "17 June 2026"
+function fmtDate(d: string) {
+  const [y, m, day] = d.split('-').map(Number)
+  return new Date(y, m - 1, day).toLocaleDateString('en-MY', { day: 'numeric', month: 'long', year: 'numeric' })
+}
+
 function AvailabilityTab({ vendor, onVendorUpdate, supabase, items, onItemUpdate }: {
   vendor: Vendor
   onVendorUpdate: (v: Vendor) => void
@@ -887,48 +896,36 @@ function AvailabilityTab({ vendor, onVendorUpdate, supabase, items, onItemUpdate
   items: Item[]
   onItemUpdate: (item: Item) => void
 }) {
-  const [bookings, setBookings]         = useState<Booking[]>([])
-  const [blockedDates, setBlockedDates] = useState<string[]>(vendor.blocked_dates ?? [])
-  const [newCloseAll, setNewCloseAll]   = useState('')
-  const [loading, setLoading]           = useState(true)
-
-  // Single room selector + single calendar
-  const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null)
-  const [calMonth, setCalMonth] = useState(() => {
-    const d = new Date(); d.setDate(1); return d
-  })
-
-  // Auto-select first room on mount / when items load
-  useEffect(() => {
-    if (items.length > 0 && !selectedRoomId) {
-      setSelectedRoomId(items[0].id)
-    }
-  }, [items, selectedRoomId])
+  const [bookings, setBookings]           = useState<Booking[]>([])
+  const [blockedDates, setBlockedDates]   = useState<string[]>(vendor.blocked_dates ?? [])
+  const [selectedRoomId, setSelectedRoomId] = useState<string>('')
+  const [calMonth, setCalMonth]           = useState(() => { const d = new Date(); d.setDate(1); return d })
+  const [pendingDate, setPendingDate]     = useState<string | null>(null)
+  const [pendingAction, setPendingAction] = useState<'block' | 'unblock' | null>(null)
+  const [saving, setSaving]               = useState(false)
+  const [saveError, setSaveError]         = useState<string | null>(null)
+  const [saveSuccess, setSaveSuccess]     = useState(false)
 
   useEffect(() => {
     const load = async () => {
       const { data } = await supabase.from('bookings').select('*').eq('vendor_id', vendor.id).order('start_date')
       setBookings((data ?? []) as Booking[])
-      setLoading(false)
     }
     load()
-
     const channel = supabase.channel(`bookings:${vendor.id}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'bookings', filter: `vendor_id=eq.${vendor.id}` },
         (payload) => setBookings((prev) => [...prev, payload.new as Booking]))
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'bookings', filter: `vendor_id=eq.${vendor.id}` },
         (payload) => setBookings((prev) => prev.map((b) => b.id === (payload.new as Booking).id ? payload.new as Booking : b)))
       .subscribe()
-
     return () => { supabase.removeChannel(channel) }
   }, [vendor.id, supabase])
 
-  const today = new Date().toISOString().split('T')[0]
-
-  // Selected room
+  const today        = new Date().toISOString().split('T')[0]
+  const isCloseAll   = selectedRoomId === CLOSE_ALL
+  const hasSelection = selectedRoomId !== ''
   const selectedRoom = items.find((i) => i.id === selectedRoomId) ?? null
 
-  // Booked dates for the selected room only
   const roomBookedDateMap = useMemo(() => {
     if (!selectedRoom) return {} as Record<string, BookingStatus>
     const map: Record<string, BookingStatus> = {}
@@ -946,257 +943,314 @@ function AvailabilityTab({ vendor, onVendorUpdate, supabase, items, onItemUpdate
   }, [selectedRoom, bookings])
 
   const roomBlockedSet = useMemo(() => new Set(selectedRoom?.blocked_dates ?? []), [selectedRoom])
+  const closeAllSet    = useMemo(() => new Set(blockedDates), [blockedDates])
 
-  // Per-room block toggle
-  const toggleRoomBlock = async (dateStr: string) => {
-    if (!selectedRoom) return
-    const prev = selectedRoom.blocked_dates ?? []
-    const next = prev.includes(dateStr) ? prev.filter((d) => d !== dateStr) : [...prev, dateStr]
-    onItemUpdate({ ...selectedRoom, blocked_dates: next })
-    const { data, error } = await supabase
-      .from('items').update({ blocked_dates: next }).eq('id', selectedRoom.id).select().single()
-    if (error) onItemUpdate({ ...selectedRoom, blocked_dates: prev })
-    else if (data) onItemUpdate(data as Item)
+  // Click a day → open confirmation modal
+  const handleDayClick = (dateStr: string) => {
+    const isBooked  = !isCloseAll && !!roomBookedDateMap[dateStr]
+    if (isBooked) return
+    const isBlocked = isCloseAll ? closeAllSet.has(dateStr) : roomBlockedSet.has(dateStr)
+    setPendingDate(dateStr)
+    setPendingAction(isBlocked ? 'unblock' : 'block')
   }
 
-  // Vendor-level "close all rooms" toggle
-  const toggleCloseAll = async (dateStr: string) => {
-    const prev = blockedDates
-    const next = blockedDates.includes(dateStr)
-      ? blockedDates.filter((d) => d !== dateStr)
-      : [...blockedDates, dateStr]
-    setBlockedDates(next)
-    const { data, error } = await supabase.from('vendors').update({ blocked_dates: next }).eq('id', vendor.id).select().single()
-    if (error) { setBlockedDates(prev); return }
-    if (data) onVendorUpdate(data as Vendor)
+  // Confirm modal action
+  const handleConfirm = async () => {
+    if (!pendingDate || !pendingAction) return
+    setSaving(true)
+    setSaveError(null)
+
+    let failed = false
+
+    if (isCloseAll) {
+      const prev = blockedDates
+      const next = pendingAction === 'block'
+        ? [...blockedDates, pendingDate]
+        : blockedDates.filter((d) => d !== pendingDate)
+      setBlockedDates(next)                                          // optimistic
+      const { error } = await supabase.from('vendors')
+        .update({ blocked_dates: next }).eq('id', vendor.id)
+      if (error) {
+        setBlockedDates(prev)                                        // rollback
+        setSaveError('Could not save. Please try again.')
+        failed = true
+      } else {
+        onVendorUpdate({ ...vendor, blocked_dates: next })           // sync parent
+      }
+    } else if (selectedRoom) {
+      const prev = selectedRoom.blocked_dates ?? []
+      const next = pendingAction === 'block'
+        ? [...prev, pendingDate]
+        : prev.filter((d) => d !== pendingDate)
+      onItemUpdate({ ...selectedRoom, blocked_dates: next })         // optimistic
+      const { error } = await supabase.from('items')
+        .update({ blocked_dates: next }).eq('id', selectedRoom.id)
+      if (error) {
+        onItemUpdate({ ...selectedRoom, blocked_dates: prev })       // rollback
+        setSaveError('Could not save. Please try again.')
+        failed = true
+      }
+      // Note: we do NOT overwrite optimistic update with server response —
+      // the optimistic state is already correct and prevents a visual flicker.
+    }
+
+    setSaving(false)
+
+    if (!failed) {
+      setSaveSuccess(true)
+      setTimeout(() => {
+        setSaveSuccess(false)
+        setPendingDate(null)
+        setPendingAction(null)
+      }, 1200)
+    }
   }
 
-  const addCloseAll = async () => {
-    if (!newCloseAll || blockedDates.includes(newCloseAll)) return
-    await toggleCloseAll(newCloseAll)
-    setNewCloseAll('')
+  const closeModal = () => {
+    setPendingDate(null)
+    setPendingAction(null)
+    setSaveError(null)
+    setSaveSuccess(false)
   }
 
-  const updateBookingStatus = async (id: string, status: BookingStatus) => {
-    const snapshot = bookings.find((b) => b.id === id)
-    setBookings((prev) => prev.map((b) => b.id === id ? { ...b, status } : b))
-    const { error } = await supabase.from('bookings').update({ status }).eq('id', id)
-    if (error && snapshot) setBookings((prev) => prev.map((b) => b.id === id ? snapshot : b))
-  }
+  const calYear     = calMonth.getFullYear()
+  const calMon      = calMonth.getMonth()
+  const firstDow    = new Date(calYear, calMon, 1).getDay()
+  const daysInMonth = new Date(calYear, calMon + 1, 0).getDate()
+  const monthLabel  = calMonth.toLocaleString('default', { month: 'long', year: 'numeric' })
 
-  // Calendar grid helpers for the single calendar
-  const calYear       = calMonth.getFullYear()
-  const calMon        = calMonth.getMonth()
-  const calFirstDow   = new Date(calYear, calMon, 1).getDay()
-  const calDaysInMonth = new Date(calYear, calMon + 1, 0).getDate()
-  const calMonthLabel  = calMonth.toLocaleString('default', { month: 'long', year: 'numeric' })
+  const activePills = isCloseAll
+    ? [...blockedDates].sort()
+    : [...(selectedRoom?.blocked_dates ?? [])].sort()
 
-  const upcomingBookings = bookings
-    .filter((b) => b.end_date >= today && b.status !== 'cancelled')
-    .sort((a, b) => a.start_date.localeCompare(b.start_date))
+  const contextLabel = isCloseAll
+    ? 'Tap a date to close your entire property. All rooms will be unavailable on that day.'
+    : `Tap any date to block it for ${selectedRoom?.name ?? 'this room'}. Blocked dates are hidden from customers booking online.`
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
 
-      {/* ── Main calendar card ─────────────────────────────────── */}
-      <div className="bg-white rounded-2xl border border-border overflow-hidden">
-
-        {/* Header + room tabs */}
-        <div className="px-5 pt-5 pb-4 border-b border-border space-y-3">
-          <h2 className="text-base font-semibold text-ink">Availability Calendar</h2>
-
-          {items.length === 0 ? (
-            <p className="text-sm text-fog py-2">
-              No rooms or services yet — add them in the <strong>Rooms &amp; Services</strong> tab first.
-            </p>
-          ) : (
-            <div className="flex flex-wrap gap-2">
-              {items.map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => setSelectedRoomId(item.id)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors border ${
-                    selectedRoomId === item.id
-                      ? 'bg-ink text-white border-ink'
-                      : 'bg-surface text-fog border-border hover:text-ink hover:border-ink'
-                  }`}
-                >
-                  {item.name}
-                  {(item.blocked_dates?.length ?? 0) > 0 && (
-                    <span className="ml-1.5 bg-brand/20 text-brand rounded-full px-1.5 py-0.5 text-[9px] font-black">
-                      {item.blocked_dates.length}
-                    </span>
-                  )}
-                </button>
-              ))}
-            </div>
-          )}
+      {/* ── Step 1: Room / Service Selector ──────────────────────── */}
+      <div className="bg-white rounded-2xl border border-border p-5 space-y-3">
+        <div>
+          <p className="text-[10px] font-bold text-fog uppercase tracking-widest mb-1">Step 1</p>
+          <h2 className="text-base font-semibold text-ink">Select Room / Service</h2>
         </div>
 
-        {/* Calendar body — only shown when a room is selected */}
-        {selectedRoom ? (
-          <div className="p-5 space-y-4">
+        {items.length === 0 ? (
+          <p className="text-sm text-fog">No rooms yet — add them in <strong>Rooms &amp; Services</strong> first.</p>
+        ) : (
+          <select
+            value={selectedRoomId}
+            onChange={(e) => { setSelectedRoomId(e.target.value); setPendingDate(null) }}
+            className={inputCls}
+          >
+            <option value="" disabled>Choose a room or service…</option>
+            {items.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.name}{(item.blocked_dates?.length ?? 0) > 0 ? ` (${item.blocked_dates.length} blocked)` : ''}
+              </option>
+            ))}
+            <option value={CLOSE_ALL}>🔒 Close All Rooms (property-wide)</option>
+          </select>
+        )}
+      </div>
+
+      {/* ── Step 2: Calendar ─────────────────────────────────────── */}
+      {!hasSelection ? (
+        <div className="bg-white rounded-2xl border-2 border-dashed border-border p-14 text-center space-y-2">
+          <p className="text-3xl">📅</p>
+          <p className="font-semibold text-ink">Calendar will appear here</p>
+          <p className="text-sm text-fog">Select a room or service above to manage its availability.</p>
+        </div>
+      ) : (
+        <div className="bg-white rounded-2xl border border-border overflow-hidden">
+
+          {/* Header */}
+          <div className="px-5 pt-5 pb-4 border-b border-border space-y-1">
+            <p className="text-[10px] font-bold text-fog uppercase tracking-widest">Step 2</p>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-base font-semibold text-ink">
+                  {isCloseAll ? 'Close All Rooms' : selectedRoom?.name}
+                </h2>
+                <p className="text-xs text-fog mt-0.5">{contextLabel}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-5 space-y-5">
             {/* Legend */}
-            <div className="flex flex-wrap gap-4 text-xs text-fog">
-              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-yellow-100 border border-yellow-300" />Pending</span>
-              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-brand/20 border border-brand/30" />Confirmed</span>
-              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-surface border border-border line-through" />Blocked</span>
+            <div className="flex flex-wrap gap-3 text-[11px] text-fog">
+              {!isCloseAll && <>
+                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-md bg-green-100 border border-green-300 shrink-0" />Confirmed booking</span>
+                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-md bg-yellow-100 border border-yellow-300 shrink-0" />Pending booking</span>
+              </>}
+              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-md bg-red-100 border border-red-200 shrink-0" />Manually blocked</span>
             </div>
 
             {/* Month navigation */}
             <div className="flex items-center justify-between">
               <button onClick={() => setCalMonth(new Date(calYear, calMon - 1, 1))}
-                className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-surface text-fog hover:text-ink transition-colors text-xl">‹</button>
-              <span className="text-sm font-semibold text-ink">{calMonthLabel}</span>
+                className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface text-fog hover:text-ink transition-colors text-xl">‹</button>
+              <span className="text-base font-bold text-ink">{monthLabel}</span>
               <button onClick={() => setCalMonth(new Date(calYear, calMon + 1, 1))}
-                className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-surface text-fog hover:text-ink transition-colors text-xl">›</button>
+                className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface text-fog hover:text-ink transition-colors text-xl">›</button>
             </div>
 
-            {/* Calendar grid */}
-            <div className="grid grid-cols-7 gap-px">
-              {['Su','Mo','Tu','We','Th','Fr','Sa'].map((d) => (
-                <div key={d} className="text-center text-xs font-semibold text-fog py-2">{d}</div>
+            {/* Day-of-week headers */}
+            <div className="grid grid-cols-7">
+              {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map((d) => (
+                <div key={d} className="text-center text-[10px] font-bold text-fog py-1 uppercase tracking-wide">{d}</div>
               ))}
-              {Array.from({ length: calFirstDow }).map((_, i) => <div key={`e${i}`} />)}
-              {Array.from({ length: calDaysInMonth }).map((_, i) => {
+            </div>
+
+            {/* Day cells */}
+            <div className="grid grid-cols-7 gap-1">
+              {Array.from({ length: firstDow }).map((_, i) => <div key={`e${i}`} />)}
+              {Array.from({ length: daysInMonth }).map((_, i) => {
                 const day     = i + 1
                 const dateStr = `${calYear}-${String(calMon + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-                const booked  = roomBookedDateMap[dateStr]
-                const blocked = roomBlockedSet.has(dateStr)
+                const isPast  = dateStr < today
                 const isToday = dateStr === today
+                const booked  = !isCloseAll ? roomBookedDateMap[dateStr] : undefined
+                const blocked = isCloseAll ? closeAllSet.has(dateStr) : roomBlockedSet.has(dateStr)
+                const clickable = !isPast && !booked
 
-                let bg = 'hover:bg-surface'
-                if      (booked === 'confirmed') bg = 'bg-brand/20'
-                else if (booked === 'pending')   bg = 'bg-yellow-100'
-                else if (blocked)                bg = 'bg-surface'
+                let cellBg = 'bg-white hover:bg-brand/5 border-transparent'
+                if (isPast)                       cellBg = 'bg-white border-transparent opacity-30'
+                else if (booked === 'confirmed')  cellBg = 'bg-green-50 border-green-200'
+                else if (booked === 'pending')    cellBg = 'bg-yellow-50 border-yellow-200'
+                else if (blocked)                 cellBg = 'bg-red-50 border-red-200 hover:bg-red-100'
 
                 return (
                   <button
                     key={dateStr}
-                    onClick={() => !booked && toggleRoomBlock(dateStr)}
-                    title={booked ? 'Booked — cannot change' : blocked ? 'Click to unblock' : 'Click to block'}
-                    className={`relative aspect-square flex items-center justify-center text-xs rounded-lg transition-colors ${bg} ${booked ? 'cursor-default' : 'cursor-pointer'}`}
+                    disabled={isPast || !!booked}
+                    onClick={() => clickable && handleDayClick(dateStr)}
+                    className={`relative flex flex-col items-center justify-center rounded-xl aspect-square border text-sm font-semibold transition-all
+                      ${cellBg}
+                      ${isToday ? 'ring-2 ring-brand ring-offset-1' : ''}
+                      ${clickable ? 'cursor-pointer' : 'cursor-default'}`}
                   >
-                    <span className={`${isToday ? 'font-bold text-brand' : blocked && !booked ? 'line-through text-fog' : 'text-ink'}`}>
+                    <span className={`leading-none
+                      ${booked === 'confirmed' ? 'text-green-700' : ''}
+                      ${booked === 'pending'   ? 'text-yellow-700' : ''}
+                      ${blocked && !booked     ? 'text-red-400 line-through' : ''}
+                      ${!booked && !blocked && !isPast ? 'text-ink' : ''}
+                    `}>
                       {day}
                     </span>
+                    {blocked && !booked && (
+                      <span className="text-[7px] font-black text-red-400 leading-none mt-0.5 uppercase tracking-wide">Blocked</span>
+                    )}
+                    {booked === 'confirmed' && (
+                      <span className="text-[7px] font-black text-green-600 leading-none mt-0.5 uppercase tracking-wide">Booked</span>
+                    )}
+                    {booked === 'pending' && (
+                      <span className="text-[7px] font-black text-yellow-600 leading-none mt-0.5 uppercase tracking-wide">Pending</span>
+                    )}
                   </button>
                 )
               })}
             </div>
 
             {/* Blocked dates pills */}
-            {(selectedRoom.blocked_dates?.length ?? 0) > 0 && (
-              <div className="pt-3 border-t border-border">
-                <p className="text-xs font-semibold text-fog mb-2">
-                  Blocked dates for <span className="text-ink">{selectedRoom.name}</span>
+            {activePills.length > 0 && (
+              <div className="pt-4 border-t border-border space-y-2">
+                <p className="text-xs font-semibold text-fog">
+                  {isCloseAll ? 'Property closed on:' : `${selectedRoom?.name} manually blocked:`}
                 </p>
                 <div className="flex flex-wrap gap-2">
-                  {[...(selectedRoom.blocked_dates ?? [])].sort().map((d) => (
-                    <span key={d} className="flex items-center gap-1 bg-surface border border-border rounded-lg px-2.5 py-1 text-xs text-fog">
-                      {d}
-                      <button onClick={() => toggleRoomBlock(d)} className="ml-1 text-fog hover:text-brand font-bold text-xs leading-none">×</button>
-                    </span>
+                  {activePills.map((d) => (
+                    <button
+                      key={d}
+                      onClick={() => { setPendingDate(d); setPendingAction('unblock') }}
+                      className="flex items-center gap-1.5 bg-red-50 border border-red-200 rounded-lg px-2.5 py-1 text-xs text-red-600 hover:bg-red-100 transition-colors"
+                    >
+                      {d} <span className="font-bold leading-none">×</span>
+                    </button>
                   ))}
                 </div>
               </div>
             )}
           </div>
-        ) : items.length > 0 ? (
-          <p className="text-sm text-fog text-center py-12">Select a room above to view its calendar</p>
-        ) : null}
-      </div>
-
-      {/* ── Close all rooms (vendor-level) ─────────────────────── */}
-      <div className="bg-white rounded-2xl border border-border p-5 space-y-3">
-        <div>
-          <h2 className="text-sm font-semibold text-ink">Close All Rooms on a Date</h2>
-          <p className="text-xs text-fog mt-0.5">Use this to mark dates when your entire property is unavailable (e.g. public holidays, maintenance).</p>
         </div>
+      )}
 
-        <div className="flex items-center gap-2">
-          <input type="date" value={newCloseAll} onChange={(e) => setNewCloseAll(e.target.value)}
-            min={today} className={`${inputCls} flex-1`} />
-          <button onClick={addCloseAll} disabled={!newCloseAll} className={btnSmall}>Block All</button>
-        </div>
+      {/* ── Confirmation Modal ────────────────────────────────────── */}
+      {pendingDate && pendingAction && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={!saving ? closeModal : undefined} />
+          <div className="relative z-10 bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
 
-        {blockedDates.length > 0 && (
-          <div className="flex flex-wrap gap-2 pt-1">
-            {[...blockedDates].sort().map((d) => (
-              <span key={d} className="flex items-center gap-1 bg-surface border border-border rounded-lg px-2.5 py-1 text-xs text-fog">
-                {d}
-                <button onClick={() => toggleCloseAll(d)} className="ml-1 text-fog hover:text-brand font-bold text-xs leading-none">×</button>
-              </span>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* ── Upcoming bookings ──────────────────────────────────── */}
-      <div className="bg-white rounded-2xl border border-border overflow-hidden">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-          <h2 className="text-base font-semibold text-ink">Upcoming Bookings</h2>
-          {upcomingBookings.length > 0 && (
-            <span className="flex items-center gap-1.5 text-xs font-semibold text-green-700">
-              <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />Live
-            </span>
-          )}
-        </div>
-
-        {loading && <p className="text-sm text-fog text-center py-12">Loading…</p>}
-        {!loading && upcomingBookings.length === 0 && (
-          <p className="text-sm text-fog text-center py-12">No upcoming bookings yet.</p>
-        )}
-
-        <ul className="divide-y divide-surface">
-          {upcomingBookings.map((b) => {
-            const nights = Math.round((new Date(b.end_date).getTime() - new Date(b.start_date).getTime()) / 86400000)
-            const statusCfg: Record<BookingStatus, { label: string; cls: string }> = {
-              pending:   { label: 'Pending',   cls: 'bg-yellow-50 text-yellow-700 border-yellow-200' },
-              confirmed: { label: 'Confirmed', cls: 'bg-green-50  text-green-700  border-green-200'  },
-              cancelled: { label: 'Cancelled', cls: 'bg-surface   text-fog        border-border'     },
-            }
-            const cfg = statusCfg[b.status]
-            return (
-              <li key={b.id} className="px-6 py-4 space-y-3">
-                <div className="flex items-start justify-between gap-3">
+            {/* Success state */}
+            {saveSuccess ? (
+              <div className="p-8 flex flex-col items-center justify-center gap-3 text-center">
+                <div className="w-14 h-14 rounded-full bg-green-50 border-2 border-green-200 flex items-center justify-center text-2xl">✓</div>
+                <p className="font-bold text-ink text-base">
+                  {pendingAction === 'block' ? 'Date blocked!' : 'Date unblocked!'}
+                </p>
+                <p className="text-sm text-fog">
+                  <span className="font-semibold text-ink">{fmtDate(pendingDate)}</span> is now{' '}
+                  {pendingAction === 'block' ? 'marked as unavailable.' : 'open for bookings.'}
+                </p>
+              </div>
+            ) : (
+              <>
+                {/* Colour bar */}
+                <div className={`h-1.5 w-full ${pendingAction === 'block' ? 'bg-gradient-to-r from-brand-dark to-brand' : 'bg-green-400'}`} />
+                <div className="p-6 space-y-4">
                   <div>
-                    <p className="font-semibold text-ink text-sm">{b.customer_name}</p>
-                    {b.customer_phone && <p className="text-xs text-fog">{b.customer_phone}</p>}
-                    {b.service_name && <p className="text-xs text-fog mt-0.5">Service: {b.service_name}</p>}
+                    <p className="text-lg font-bold text-ink">
+                      {pendingAction === 'block' ? '🔒 Block this date?' : '🔓 Unblock this date?'}
+                    </p>
+                    <p className="text-sm text-fog mt-1">
+                      <span className="font-semibold text-ink">{fmtDate(pendingDate)}</span>
+                      <span className="mx-1.5">·</span>
+                      <span>{isCloseAll ? 'All rooms' : selectedRoom?.name}</span>
+                    </p>
                   </div>
-                  <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border shrink-0 ${cfg.cls}`}>{cfg.label}</span>
-                </div>
-                <div className="flex items-center gap-4 text-xs text-fog">
-                  <span>📅 {b.start_date}</span>
-                  <span>→</span>
-                  <span>{b.end_date}</span>
-                  <span className="text-ink font-semibold">{nights} night{nights !== 1 ? 's' : ''}</span>
-                </div>
-                {b.notes && <p className="text-xs text-fog italic">"{b.notes}"</p>}
-                {b.status === 'pending' && (
-                  <div className="flex items-center gap-3 pt-1">
-                    <button onClick={() => updateBookingStatus(b.id, 'confirmed')}
-                      className="flex-1 bg-gradient-to-r from-brand-dark to-brand text-white font-semibold rounded-xl py-2 text-xs hover:opacity-90 transition-opacity">
-                      Confirm Booking
+
+                  <p className="text-sm text-fog leading-relaxed">
+                    {pendingAction === 'block'
+                      ? 'This date will be marked as unavailable. Customers cannot book online — ideal for walk-in or external bookings.'
+                      : 'This date will be reopened for online customer bookings.'}
+                  </p>
+
+                  {/* Error message */}
+                  {saveError && (
+                    <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+                      <p className="text-sm text-brand font-semibold">{saveError}</p>
+                      <p className="text-xs text-fog mt-0.5">Check that your database has the <code>blocked_dates</code> column. Run the SQL migration in Supabase if not.</p>
+                    </div>
+                  )}
+
+                  <div className="flex gap-3 pt-1">
+                    <button
+                      onClick={handleConfirm}
+                      disabled={saving}
+                      className={`flex-1 font-semibold rounded-xl py-3 text-sm transition-opacity disabled:opacity-50
+                        ${pendingAction === 'block'
+                          ? 'bg-gradient-to-r from-brand-dark to-brand text-white'
+                          : 'bg-green-500 text-white'}`}
+                    >
+                      {saving ? 'Saving…' : pendingAction === 'block' ? 'Block Date (Manual Booking)' : 'Unblock Date'}
                     </button>
-                    <button onClick={() => updateBookingStatus(b.id, 'cancelled')}
-                      className="flex-1 border border-border text-fog font-semibold rounded-xl py-2 text-xs hover:border-ink hover:text-ink transition-colors">
-                      Decline
+                    <button
+                      onClick={closeModal}
+                      disabled={saving}
+                      className="flex-1 border border-border text-fog font-semibold rounded-xl py-3 text-sm hover:border-ink hover:text-ink transition-colors disabled:opacity-50"
+                    >
+                      Cancel
                     </button>
                   </div>
-                )}
-                {b.status === 'confirmed' && (
-                  <button onClick={() => updateBookingStatus(b.id, 'cancelled')}
-                    className="text-xs font-semibold text-fog underline underline-offset-2">
-                    Cancel booking
-                  </button>
-                )}
-              </li>
-            )
-          })}
-        </ul>
-      </div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
