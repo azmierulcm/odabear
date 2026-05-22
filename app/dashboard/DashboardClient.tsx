@@ -20,8 +20,15 @@ export default function DashboardClient({ userId, vendor: initialVendor, initial
   const [tab, setTab]               = useState<Tab>('profile')
   const [categories, setCategories] = useState<Category[]>(initialCategories)
   const [items, setItems]           = useState<Item[]>(initialItems)
+  const [showBackToTop, setShowBackToTop] = useState(false)
 
   const supabase = useMemo(() => createClient(), [])
+
+  useEffect(() => {
+    const onScroll = () => setShowBackToTop(window.scrollY > 300)
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
 
   const refreshData = async (vendorId: string) => {
     const { data: cats } = await supabase.from('categories').select('*').eq('vendor_id', vendorId).order('sort_order', { ascending: true })
@@ -118,6 +125,19 @@ export default function DashboardClient({ userId, vendor: initialVendor, initial
         <SettingsTab userId={userId} vendor={vendor} onSaved={(v) => setVendor(v)} supabase={supabase} />
       )}
       {tab === 'settings' && !vendor && <SetupPrompt onGoToProfile={() => setTab('profile')} />}
+
+      {/* ── Back to Top ───────────────────────────────────────── */}
+      <button
+        onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+        aria-label="Back to top"
+        className={`fixed bottom-6 right-4 z-50 flex items-center justify-center w-11 h-11 rounded-full bg-ink text-white shadow-lg transition-all duration-300 ${
+          showBackToTop ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'
+        }`}
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
+        </svg>
+      </button>
     </div>
   )
 }
