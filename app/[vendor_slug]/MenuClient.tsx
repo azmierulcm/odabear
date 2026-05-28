@@ -175,14 +175,26 @@ export default function MenuClient({ vendor, categories }: Props) {
 
       {/* ── Desktop title ────────────────────────────────────── */}
       <div className="hidden lg:block max-w-7xl mx-auto px-8 pt-10 pb-6">
-        <div className="flex items-center gap-4">
-          {vendor.logo_url && (
-            <img src={vendor.logo_url} alt={vendor.name} className="w-16 h-16 rounded-full object-cover border border-border shrink-0" />
-          )}
-          <div>
-            <h1 className="text-3xl font-bold text-ink">{vendor.name}</h1>
-            <p className="text-sm text-fog mt-0.5">{totalItemCount} items</p>
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            {vendor.logo_url && (
+              <img src={vendor.logo_url} alt={vendor.name} className="w-16 h-16 rounded-full object-cover border border-border shrink-0" />
+            )}
+            <div>
+              <h1 className="text-3xl font-bold text-ink">{vendor.name}</h1>
+              <p className="text-sm text-fog mt-0.5">{totalItemCount} items</p>
+            </div>
           </div>
+          {vendor.makanjom_restaurant_id && (
+            <a
+              href={`https://makanjom.com/restaurants/${vendor.makanjom_restaurant_id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 rounded-full border border-neutral-200 bg-white px-4 py-2 text-xs font-semibold text-neutral-600 shadow-sm hover:border-neutral-300 hover:text-neutral-900 transition shrink-0"
+            >
+              <span>🍽️</span> Discover on Makanjom
+            </a>
+          )}
         </div>
       </div>
 

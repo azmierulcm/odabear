@@ -215,10 +215,26 @@ function ProfileTab({ userId, vendor, businessType, onSaved, supabase }: {
   const [locationLat, setLocationLat]         = useState(vendor?.location_lat?.toString() ?? '')
   const [locationLng, setLocationLng]         = useState(vendor?.location_lng?.toString() ?? '')
   const [galleryUrls, setGalleryUrls]         = useState<string[]>(vendor?.gallery_urls ?? [])
+  const [makanjomUrl, setMakanjomUrl]         = useState(() => {
+    const id = vendor?.makanjom_restaurant_id
+    return id ? `https://makanjom.com/restaurants/${id}` : ''
+  })
   const [logoUploading, setLogoUploading] = useState(false)
   const [logoUploadError, setLogoUploadError] = useState<string | null>(null)
   const [saving, setSaving]           = useState(false)
   const [message, setMessage]         = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+
+  // Extract UUID from a Makanjom restaurant URL or a raw UUID string
+  const parseMakanjomId = (raw: string): string | null => {
+    const trimmed = raw.trim()
+    if (!trimmed) return null
+    // Full URL: https://makanjom.com/restaurants/<uuid>
+    const urlMatch = trimmed.match(/restaurants\/([0-9a-f-]{36})/i)
+    if (urlMatch) return urlMatch[1]
+    // Raw UUID
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(trimmed)) return trimmed
+    return null
+  }
 
   const descPlaceholder = businessType === 'booking'
     ? 'Describe your property, location, amenities…'
@@ -269,8 +285,9 @@ function ProfileTab({ userId, vendor, businessType, onSaved, supabase }: {
       location_address: businessType === 'booking' ? (locationAddress.trim() || null) : null,
       location_lat:     businessType === 'booking' ? (locationLat.trim() ? parseFloat(locationLat) : null) : null,
       location_lng:     businessType === 'booking' ? (locationLng.trim() ? parseFloat(locationLng) : null) : null,
-      gallery_urls:     galleryUrls,
-      business_type:    businessType,
+      gallery_urls:            galleryUrls,
+      business_type:           businessType,
+      makanjom_restaurant_id:  parseMakanjomId(makanjomUrl),
     }
 
     let result
@@ -391,6 +408,23 @@ function ProfileTab({ userId, vendor, businessType, onSaved, supabase }: {
                 placeholder={promoPlaceholder} className={inputCls} />
             </Field>
           )}
+
+          <Field
+            label="Makanjom Listing (optional)"
+            hint={
+              parseMakanjomId(makanjomUrl)
+                ? <span className="text-emerald-600 font-semibold">✓ Linked — customers who discover you on Makanjom will be directed here</span>
+                : 'Paste your Makanjom restaurant page URL to link the two platforms'
+            }
+          >
+            <input
+              type="text"
+              value={makanjomUrl}
+              onChange={(e) => setMakanjomUrl(e.target.value)}
+              placeholder="https://makanjom.com/restaurants/..."
+              className={inputCls}
+            />
+          </Field>
 
           {message && (
             <p className={`text-sm rounded-xl px-4 py-2.5 ${message.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-brand'}`}>
