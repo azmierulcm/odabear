@@ -145,7 +145,7 @@ export default function MenuClient({ vendor, categories }: Props) {
   }, [activeCategory])
 
   // ── Lightbox ───────────────────────────────────────────────
-  const [lightbox, setLightbox] = useState<{ url: string; name: string } | null>(null)
+  const [lightbox, setLightbox] = useState<{ url: string; name: string; description?: string | null } | null>(null)
 
   return (
     <div className="min-h-screen bg-white">
@@ -155,7 +155,12 @@ export default function MenuClient({ vendor, categories }: Props) {
         <div className="fixed inset-0 z-50 bg-black/85 flex flex-col items-center justify-center p-4" onClick={() => setLightbox(null)}>
           <button onClick={() => setLightbox(null)} className="absolute top-4 right-4 w-9 h-9 bg-white/20 hover:bg-white/30 rounded-full flex items-center justify-center text-white text-lg transition-colors">✕</button>
           <img src={lightbox.url} alt={lightbox.name} className="max-w-full max-h-[80vh] rounded-2xl object-contain shadow-2xl" onClick={(e) => e.stopPropagation()} />
-          <p className="mt-4 text-white font-semibold text-sm text-center">{lightbox.name}</p>
+          <div className="mt-4 max-w-md text-center" onClick={(e) => e.stopPropagation()}>
+            <p className="text-white font-semibold text-sm">{lightbox.name}</p>
+            {lightbox.description && (
+              <p className="mt-1.5 text-white/70 text-xs leading-relaxed whitespace-pre-line">{lightbox.description}</p>
+            )}
+          </div>
         </div>
       )}
 
@@ -243,7 +248,7 @@ export default function MenuClient({ vendor, categories }: Props) {
                 <h2 className="text-xl font-bold text-ink mb-5">{cat.name}</h2>
                 <div className="grid grid-cols-2 gap-4">
                   {cat.items.map((item) => (
-                    <ItemCard key={item.id} item={item} onAdd={addToCart} onImageClick={(url, name) => setLightbox({ url, name })} />
+                    <ItemCard key={item.id} item={item} onAdd={addToCart} onImageClick={(url, name, description) => setLightbox({ url, name, description })} />
                   ))}
                 </div>
               </section>
@@ -647,12 +652,12 @@ function DesktopCartPanel({ cart, vendor, onUpdate, onClearCart, totalPrice, sup
 function ItemCard({ item, onAdd, onImageClick }: {
   item: Item
   onAdd: (item: Item) => void
-  onImageClick: (url: string, name: string) => void
+  onImageClick: (url: string, name: string, description?: string | null) => void
 }) {
   return (
     <div className={`group bg-white rounded-2xl overflow-hidden flex flex-col border border-border hover:shadow-md transition-shadow ${!item.is_available ? 'opacity-60' : ''}`}>
       <div className={`aspect-[4/3] relative bg-surface overflow-hidden ${item.image_url ? 'cursor-zoom-in' : ''}`}
-        onClick={() => item.image_url && onImageClick(item.image_url, item.name)}>
+        onClick={() => item.image_url && onImageClick(item.image_url, item.name, item.description)}>
         {item.image_url
           ? <Image src={item.image_url} alt={item.name} fill sizes="(max-width: 1024px) 50vw, 300px" className="object-cover group-hover:scale-105 transition-transform duration-300" />
           : <div className="absolute inset-0 flex items-center justify-center text-5xl select-none">🍽️</div>
