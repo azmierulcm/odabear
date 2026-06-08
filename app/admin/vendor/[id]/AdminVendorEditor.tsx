@@ -455,10 +455,11 @@ function ItemsEditor({ vendor, categories, items, itemLabel, isBooking, setItems
                   onChange={(e) => setForm({ ...form, price: e.target.value })} className={inputCls} />
               </Field>
             </div>
-            <Field label="Description">
-              <input type="text" value={form.description}
+            <Field label="Description" hint="Use a new line to start a new paragraph.">
+              <textarea value={form.description}
                 onChange={(e) => setForm({ ...form, description: e.target.value })}
-                placeholder="Optional" className={inputCls} />
+                placeholder="Optional — write a few lines about this item…" rows={4}
+                className={`${inputCls} resize-none`} />
             </Field>
             <Field label="Category" required>
               <select required value={form.category_id}

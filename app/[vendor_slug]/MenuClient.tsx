@@ -665,7 +665,7 @@ function ItemCard({ item, onAdd, onImageClick }: {
       </div>
       <div className="p-3 flex flex-col flex-1">
         <p className="text-sm font-bold text-ink leading-snug line-clamp-1">{item.name}</p>
-        {item.description && <p className="text-xs text-fog mt-0.5 line-clamp-2 leading-relaxed">{item.description}</p>}
+        {item.description && <p className="text-xs text-fog mt-0.5 line-clamp-2 leading-relaxed whitespace-pre-line">{item.description}</p>}
         <div className="flex items-center justify-between mt-auto pt-2.5 gap-2">
           <span className="text-sm font-bold text-ink tabular-nums">RM {item.price.toFixed(2)}</span>
           <button onClick={(e) => { e.stopPropagation(); onAdd(item) }} disabled={!item.is_available}

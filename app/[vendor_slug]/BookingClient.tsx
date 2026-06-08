@@ -440,7 +440,7 @@ function ServiceCard({ item, selected, onSelect }: { item: Item; selected: boole
           <p className="font-bold text-ink text-sm">{item.name}</p>
           <p className="font-bold text-ink text-sm tabular-nums shrink-0">RM {item.price.toFixed(2)}<span className="font-normal text-fog text-xs">/night</span></p>
         </div>
-        {item.description && <p className="text-xs text-fog mt-1 line-clamp-2">{item.description}</p>}
+        {item.description && <p className="text-xs text-fog mt-1 line-clamp-2 whitespace-pre-line">{item.description}</p>}
         {!item.is_available && <p className="text-xs text-brand font-semibold mt-1">Unavailable</p>}
       </div>
       {selected && <span className="text-brand shrink-0 text-lg">✓</span>}
