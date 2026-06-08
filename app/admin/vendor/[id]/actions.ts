@@ -29,6 +29,22 @@ export async function adminUpdateVendor(vendorId: string, payload: Record<string
   return data
 }
 
+export async function adminUploadImage(vendorId: string, formData: FormData): Promise<string> {
+  const email = await verifyAdmin()
+  const file = formData.get('file')
+  if (!(file instanceof File)) throw new Error('No file provided.')
+  if (file.size > 5 * 1024 * 1024) throw new Error('File too large. Max 5 MB.')
+
+  const ext  = file.name.split('.').pop() ?? 'jpg'
+  const path = `admin/${vendorId}_${Date.now()}.${ext}`
+  const { data, error } = await adminSupabase.storage.from('vendor-galleries').upload(path, file, { upsert: true })
+  if (error) throw new Error(error.message)
+
+  console.log(`[admin] uploadImage vendor=${vendorId} path=${data.path} by=${email}`)
+  const { data: urlData } = adminSupabase.storage.from('vendor-galleries').getPublicUrl(data.path)
+  return urlData.publicUrl
+}
+
 export async function adminAddCategory(vendorId: string, name: string, sortOrder: number) {
   const email = await verifyAdmin()
   console.log(`[admin] addCategory vendor=${vendorId} name="${name}" by=${email}`)
@@ -56,11 +72,13 @@ export async function adminUpsertItem(itemId: string | null, payload: Record<str
   const email = await verifyAdmin()
   console.log(`[admin] upsertItem id=${itemId ?? 'new'} by=${email}`)
   if (itemId) {
-    const { error } = await adminSupabase.from('items').update(payload).eq('id', itemId)
+    const { data, error } = await adminSupabase.from('items').update(payload).eq('id', itemId).select().single()
     if (error) throw new Error(error.message)
+    return data
   } else {
-    const { error } = await adminSupabase.from('items').insert(payload)
+    const { data, error } = await adminSupabase.from('items').insert(payload).select().single()
     if (error) throw new Error(error.message)
+    return data
   }
 }
 

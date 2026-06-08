@@ -1,10 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import Image from 'next/image'
 import type { Vendor, Category, Item, BusinessType } from '@/types/menu'
 import {
   adminUpdateVendor,
+  adminUploadImage,
   adminAddCategory,
   adminUpdateCategory,
   adminDeleteCategory,
@@ -28,11 +29,6 @@ export default function AdminVendorEditor({ vendor: initialVendor, initialCatego
   const [tab, setTab]               = useState<Tab>('profile')
 
   const businessType: BusinessType = vendor.business_type ?? 'restaurant'
-
-  const refreshCategories = async () => {
-    // Re-fetch via reload — server actions already mutated the DB
-    window.location.reload()
-  }
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-8">
@@ -79,7 +75,6 @@ export default function AdminVendorEditor({ vendor: initialVendor, initialCatego
           categories={categories}
           items={items}
           businessType={businessType}
-          onChanged={refreshCategories}
           setCategories={setCategories}
           setItems={setItems}
         />
@@ -97,7 +92,9 @@ function ProfileEditor({ vendor, onSaved }: { vendor: Vendor; onSaved: (v: Vendo
   const [description, setDescription] = useState(vendor.description ?? '')
   const [promoText, setPromoText]     = useState(vendor.promo_text ?? '')
   const [galleryUrls, setGalleryUrls] = useState<string[]>(vendor.gallery_urls ?? [])
-  const [newGalleryUrl, setNewGalleryUrl] = useState('')
+  const [uploading, setUploading]     = useState(false)
+  const [uploadError, setUploadError] = useState<string | null>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
   const [saving, setSaving]           = useState(false)
   const [msg, setMsg]                 = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
@@ -122,11 +119,19 @@ function ProfileEditor({ vendor, onSaved }: { vendor: Vendor; onSaved: (v: Vendo
     setSaving(false)
   }
 
-  const addGalleryUrl = () => {
-    const url = newGalleryUrl.trim()
-    if (!url || galleryUrls.length >= 5) return
-    setGalleryUrls([...galleryUrls, url])
-    setNewGalleryUrl('')
+  const handlePhotoUpload = async (file: File) => {
+    if (galleryUrls.length >= 5) return
+    setUploading(true)
+    setUploadError(null)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      const url = await adminUploadImage(vendor.id, formData)
+      setGalleryUrls((prev) => [...prev, url])
+    } catch (err: unknown) {
+      setUploadError(err instanceof Error ? err.message : 'Upload failed')
+    }
+    setUploading(false)
   }
 
   const removeGalleryUrl = (i: number) => setGalleryUrls(galleryUrls.filter((_, idx) => idx !== i))
@@ -171,9 +176,9 @@ function ProfileEditor({ vendor, onSaved }: { vendor: Vendor; onSaved: (v: Vendo
       {/* Gallery */}
       <div className="bg-white rounded-2xl border border-border p-6">
         <h2 className="text-base font-semibold text-ink mb-1">Gallery photos</h2>
-        <p className="text-xs text-fog mb-5">Up to 5 photos. Paste an image URL to add.</p>
+        <p className="text-xs text-fog mb-5">Up to 5 photos. Upload an image from your device.</p>
 
-        <div className="flex flex-wrap gap-3 mb-4">
+        <div className="flex flex-wrap gap-3 mb-2">
           {galleryUrls.map((url, i) => (
             <div key={i} className="relative w-24 h-24 rounded-xl overflow-hidden border border-border group">
               <img src={url} alt="" className="w-full h-full object-cover" />
@@ -184,29 +189,27 @@ function ProfileEditor({ vendor, onSaved }: { vendor: Vendor; onSaved: (v: Vendo
               <span className="absolute bottom-1 left-1 text-[10px] font-bold text-white bg-black/40 rounded px-1">{i + 1}</span>
             </div>
           ))}
-          {galleryUrls.length === 0 && (
-            <p className="text-sm text-fog">No gallery photos yet.</p>
+          {galleryUrls.length < 5 && (
+            <button type="button" onClick={() => fileRef.current?.click()} disabled={uploading}
+              className="w-24 h-24 rounded-xl border-2 border-dashed border-border flex flex-col items-center justify-center gap-1 text-fog hover:border-ink hover:text-ink transition-colors disabled:opacity-50">
+              <span className="text-2xl leading-none">{uploading ? '…' : '+'}</span>
+              <span className="text-[10px] font-semibold">{uploading ? 'Uploading' : 'Add photo'}</span>
+            </button>
           )}
         </div>
 
-        {galleryUrls.length < 5 && (
-          <div className="flex gap-2">
-            <input type="url" value={newGalleryUrl} onChange={(e) => setNewGalleryUrl(e.target.value)}
-              placeholder="https://images.unsplash.com/…" className={`${inputCls} flex-1 text-sm`}
-              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addGalleryUrl() } }} />
-            <button type="button" onClick={addGalleryUrl} disabled={!newGalleryUrl.trim()} className={btnSmall}>
-              Add
-            </button>
-          </div>
-        )}
+        {uploadError && <p className="text-xs text-brand mb-2">{uploadError}</p>}
 
         {galleryUrls.length > 0 && (
           <button type="button" onClick={handleSave}
-            className="mt-4 text-sm font-semibold text-brand underline underline-offset-2">
+            className="text-sm font-semibold text-brand underline underline-offset-2">
             Save gallery changes
           </button>
         )}
         <p className="text-xs text-fog mt-2">{galleryUrls.length}/5 photos</p>
+
+        <input ref={fileRef} type="file" accept="image/*" className="hidden"
+          onChange={(e) => { if (e.target.files?.[0]) handlePhotoUpload(e.target.files[0]); e.target.value = '' }} />
       </div>
     </div>
   )
@@ -214,12 +217,11 @@ function ProfileEditor({ vendor, onSaved }: { vendor: Vendor; onSaved: (v: Vendo
 
 // ─── Menu Editor ──────────────────────────────────────────────
 
-function MenuEditor({ vendor, categories, items, businessType, onChanged, setCategories, setItems }: {
+function MenuEditor({ vendor, categories, items, businessType, setCategories, setItems }: {
   vendor: Vendor
   categories: Category[]
   items: Item[]
   businessType: BusinessType
-  onChanged: () => void
   setCategories: (c: Category[]) => void
   setItems: (i: Item[]) => void
 }) {
@@ -230,20 +232,21 @@ function MenuEditor({ vendor, categories, items, businessType, onChanged, setCat
 
   return (
     <div className="space-y-6">
-      <CategoriesEditor vendor={vendor} categories={categories} catLabel={catLabel} onChanged={onChanged} setCategories={setCategories} />
-      <ItemsEditor vendor={vendor} categories={categories} items={items} itemLabel={itemLabel} isBooking={isBooking} onChanged={onChanged} setItems={setItems} />
+      <CategoriesEditor vendor={vendor} categories={categories} items={items} catLabel={catLabel} setCategories={setCategories} setItems={setItems} />
+      <ItemsEditor vendor={vendor} categories={categories} items={items} itemLabel={itemLabel} isBooking={isBooking} setItems={setItems} />
     </div>
   )
 }
 
 // ─── Categories Editor ────────────────────────────────────────
 
-function CategoriesEditor({ vendor, categories, catLabel, onChanged, setCategories }: {
+function CategoriesEditor({ vendor, categories, items, catLabel, setCategories, setItems }: {
   vendor: Vendor
   categories: Category[]
+  items: Item[]
   catLabel: string
-  onChanged: () => void
   setCategories: (c: Category[]) => void
+  setItems: (i: Item[]) => void
 }) {
   const [newName, setNewName]     = useState('')
   const [adding, setAdding]       = useState(false)
@@ -255,10 +258,10 @@ function CategoriesEditor({ vendor, categories, catLabel, onChanged, setCategori
     if (!newName.trim()) return
     setBusy(true)
     try {
-      await adminAddCategory(vendor.id, newName.trim(), categories.length)
+      const created = await adminAddCategory(vendor.id, newName.trim(), categories.length)
+      setCategories([...categories, created as Category])
       setNewName('')
       setAdding(false)
-      onChanged()
     } finally { setBusy(false) }
   }
 
@@ -277,7 +280,8 @@ function CategoriesEditor({ vendor, categories, catLabel, onChanged, setCategori
     setBusy(true)
     try {
       await adminDeleteCategory(id)
-      onChanged()
+      setCategories(categories.filter((c) => c.id !== id))
+      setItems(items.filter((i) => i.category_id !== id))
     } finally { setBusy(false) }
   }
 
@@ -337,13 +341,12 @@ function CategoriesEditor({ vendor, categories, catLabel, onChanged, setCategori
 
 const EMPTY = { name: '', description: '', price: '', image_url: '', category_id: '', is_available: true, sort_order: 0 }
 
-function ItemsEditor({ vendor, categories, items, itemLabel, isBooking, onChanged, setItems }: {
+function ItemsEditor({ vendor, categories, items, itemLabel, isBooking, setItems }: {
   vendor: Vendor
   categories: Category[]
   items: Item[]
   itemLabel: string
   isBooking: boolean
-  onChanged: () => void
   setItems: (i: Item[]) => void
 }) {
   const [showForm, setShowForm]       = useState(false)
@@ -366,8 +369,12 @@ function ItemsEditor({ vendor, categories, items, itemLabel, isBooking, onChange
         is_available: form.is_available,
         sort_order: form.sort_order,
       }
-      await adminUpsertItem(editingItem?.id ?? null, payload)
-      onChanged()
+      const saved = await adminUpsertItem(editingItem?.id ?? null, payload) as Item
+      setItems(
+        editingItem
+          ? items.map((i) => i.id === saved.id ? saved : i)
+          : [...items, saved]
+      )
       resetForm()
     } finally { setBusy(false) }
   }
