@@ -355,8 +355,31 @@ function ItemsEditor({ vendor, categories, items, itemLabel, isBooking, setItems
   const [form, setForm]               = useState({ ...EMPTY, category_id: categories[0]?.id ?? '' })
   const [editingItem, setEditingItem] = useState<Item | null>(null)
   const [busy, setBusy]               = useState(false)
+  const [uploading, setUploading]     = useState(false)
+  const [uploadError, setUploadError] = useState<string | null>(null)
+  const photoRef = useRef<HTMLInputElement>(null)
 
-  const resetForm = () => { setShowForm(false); setEditingItem(null); setForm({ ...EMPTY, category_id: categories[0]?.id ?? '' }) }
+  const resetForm = () => {
+    setShowForm(false)
+    setEditingItem(null)
+    setForm({ ...EMPTY, category_id: categories[0]?.id ?? '' })
+    setUploadError(null)
+  }
+
+  const handlePhotoUpload = async (file: File) => {
+    setUploading(true)
+    setUploadError(null)
+    try {
+      const compressed = await compressImage(file)
+      const formData = new FormData()
+      formData.append('file', compressed)
+      const url = await adminUploadImage(vendor.id, formData, 'item-images')
+      setForm((prev) => ({ ...prev, image_url: url }))
+    } catch (err: unknown) {
+      setUploadError(err instanceof Error ? err.message : 'Upload failed')
+    }
+    setUploading(false)
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -443,15 +466,27 @@ function ItemsEditor({ vendor, categories, items, itemLabel, isBooking, setItems
                 {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </Field>
-            <Field label="Image URL">
-              <input type="url" value={form.image_url}
-                onChange={(e) => setForm({ ...form, image_url: e.target.value })}
-                placeholder="https://…" className={inputCls} />
-              {form.image_url && (
-                <div className="mt-2 w-20 h-20 rounded-xl overflow-hidden border border-border">
-                  <img src={form.image_url} alt="" className="w-full h-full object-cover" />
-                </div>
-              )}
+            <Field label="Photo">
+              <div className="flex items-center gap-3">
+                {form.image_url ? (
+                  <div className="relative w-20 h-20 rounded-xl overflow-hidden border border-border group shrink-0">
+                    <img src={form.image_url} alt="" className="w-full h-full object-cover" />
+                    <button type="button" onClick={() => setForm({ ...form, image_url: '' })}
+                      className="absolute top-1 right-1 w-6 h-6 bg-white/90 rounded-full flex items-center justify-center text-brand text-sm font-bold opacity-0 group-hover:opacity-100 transition-opacity">
+                      ×
+                    </button>
+                  </div>
+                ) : (
+                  <button type="button" onClick={() => photoRef.current?.click()} disabled={uploading}
+                    className="w-20 h-20 rounded-xl border-2 border-dashed border-border flex flex-col items-center justify-center gap-1 text-fog hover:border-ink hover:text-ink transition-colors disabled:opacity-50 shrink-0">
+                    <span className="text-2xl leading-none">{uploading ? '…' : '+'}</span>
+                    <span className="text-[10px] font-semibold">{uploading ? 'Uploading' : 'Add photo'}</span>
+                  </button>
+                )}
+                {uploadError && <p className="text-xs text-brand">{uploadError}</p>}
+              </div>
+              <input ref={photoRef} type="file" accept="image/*" className="hidden"
+                onChange={(e) => { if (e.target.files?.[0]) handlePhotoUpload(e.target.files[0]); e.target.value = '' }} />
             </Field>
             <label className="flex items-center gap-2 cursor-pointer select-none">
               <input type="checkbox" checked={form.is_available}

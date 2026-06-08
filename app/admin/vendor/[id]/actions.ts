@@ -29,19 +29,22 @@ export async function adminUpdateVendor(vendorId: string, payload: Record<string
   return data
 }
 
-export async function adminUploadImage(vendorId: string, formData: FormData): Promise<string> {
+const UPLOAD_BUCKETS = new Set(['vendor-galleries', 'item-images'])
+
+export async function adminUploadImage(vendorId: string, formData: FormData, bucket: string = 'vendor-galleries'): Promise<string> {
   const email = await verifyAdmin()
+  if (!UPLOAD_BUCKETS.has(bucket)) throw new Error('Invalid upload destination.')
   const file = formData.get('file')
   if (!(file instanceof File)) throw new Error('No file provided.')
   if (file.size > 5 * 1024 * 1024) throw new Error('File too large. Max 5 MB.')
 
   const ext  = file.name.split('.').pop() ?? 'jpg'
   const path = `admin/${vendorId}_${Date.now()}.${ext}`
-  const { data, error } = await adminSupabase.storage.from('vendor-galleries').upload(path, file, { upsert: true })
+  const { data, error } = await adminSupabase.storage.from(bucket).upload(path, file, { upsert: true })
   if (error) throw new Error(error.message)
 
-  console.log(`[admin] uploadImage vendor=${vendorId} path=${data.path} by=${email}`)
-  const { data: urlData } = adminSupabase.storage.from('vendor-galleries').getPublicUrl(data.path)
+  console.log(`[admin] uploadImage vendor=${vendorId} bucket=${bucket} path=${data.path} by=${email}`)
+  const { data: urlData } = adminSupabase.storage.from(bucket).getPublicUrl(data.path)
   return urlData.publicUrl
 }
 
