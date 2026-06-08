@@ -147,7 +147,7 @@ export async function checkoutToWhatsApp(
 
     if (fallbackError) {
       console.error('[checkoutToWhatsApp] Fallback insert failed:', fallbackError.message)
-      return { success: false, error: fallbackError.message }
+      return { success: false, error: 'We could not place your order right now. Please try again or message the vendor directly on WhatsApp.' }
     }
 
     return {
@@ -157,5 +157,5 @@ export async function checkoutToWhatsApp(
     }
   }
 
-  return { success: false, error: error.message }
+  return { success: false, error: 'We could not place your order right now. Please try again or message the vendor directly on WhatsApp.' }
 }
