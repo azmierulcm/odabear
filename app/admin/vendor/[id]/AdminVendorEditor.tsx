@@ -2,6 +2,7 @@
 
 import { useState, useRef } from 'react'
 import Image from 'next/image'
+import { compressImage } from '@/lib/compressImage'
 import type { Vendor, Category, Item, BusinessType } from '@/types/menu'
 import {
   adminUpdateVendor,
@@ -124,8 +125,9 @@ function ProfileEditor({ vendor, onSaved }: { vendor: Vendor; onSaved: (v: Vendo
     setUploading(true)
     setUploadError(null)
     try {
+      const compressed = await compressImage(file)
       const formData = new FormData()
-      formData.append('file', file)
+      formData.append('file', compressed)
       const url = await adminUploadImage(vendor.id, formData)
       setGalleryUrls((prev) => [...prev, url])
     } catch (err: unknown) {

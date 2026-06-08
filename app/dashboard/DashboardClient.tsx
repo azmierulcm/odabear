@@ -3,6 +3,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import Image from 'next/image'
 import { createClient } from '@/lib/supabase/client'
+import { compressImage } from '@/lib/compressImage'
 import type { Vendor, Category, Item, Order, OrderStatus, PaymentMethod, BusinessType, Booking, BookingStatus } from '@/types/menu'
 
 type Tab = 'profile' | 'rooms' | 'main' | 'activity' | 'settings'
@@ -255,9 +256,10 @@ function ProfileTab({ userId, vendor, businessType, onSaved, supabase }: {
     if (file.size > 5 * 1024 * 1024) { setLogoUploadError('File too large. Max 5 MB.'); return }
     setLogoUploading(true)
     setLogoUploadError(null)
-    const ext  = file.name.split('.').pop() ?? 'jpg'
+    const upload = await compressImage(file)
+    const ext  = upload.name.split('.').pop() ?? 'jpg'
     const path = `${userId}/logo_${Date.now()}.${ext}`
-    const { data, error } = await supabase.storage.from('vendor-galleries').upload(path, file, { upsert: true })
+    const { data, error } = await supabase.storage.from('vendor-galleries').upload(path, upload, { upsert: true })
     if (error) {
       setLogoUploadError(`Upload failed: ${error.message}`)
     } else if (data) {
@@ -484,9 +486,10 @@ function GalleryField({ userId, vendorId, urls, onChange, supabase }: {
     if (file.size > 5 * 1024 * 1024) { setError('File too large. Max 5 MB.'); return }
     setUploading(true)
     setError(null)
-    const ext  = file.name.split('.').pop() ?? 'jpg'
+    const upload = await compressImage(file)
+    const ext  = upload.name.split('.').pop() ?? 'jpg'
     const path = `${userId}/${vendorId}_${Date.now()}.${ext}`
-    const { data, error: err } = await supabase.storage.from('vendor-galleries').upload(path, file, { upsert: true })
+    const { data, error: err } = await supabase.storage.from('vendor-galleries').upload(path, upload, { upsert: true })
     if (err) {
       setError(`Upload failed: ${err.message}`)
     } else if (data) {
@@ -691,9 +694,10 @@ function ItemsTab({ userId, vendor, categories, items, itemLabel, isBooking, onC
     if (file.size > 5 * 1024 * 1024) { setUploadError('File too large. Max 5 MB.'); return }
     setUploading(true)
     setUploadError(null)
-    const ext  = file.name.split('.').pop() ?? 'jpg'
+    const upload = await compressImage(file)
+    const ext  = upload.name.split('.').pop() ?? 'jpg'
     const path = `${userId}/${vendor.id}_${Date.now()}.${ext}`
-    const { data, error } = await supabase.storage.from('item-images').upload(path, file, { upsert: true })
+    const { data, error } = await supabase.storage.from('item-images').upload(path, upload, { upsert: true })
     if (error) {
       setUploadError(`Upload failed: ${error.message}`)
     } else if (data) {
@@ -709,9 +713,10 @@ function ItemsTab({ userId, vendor, categories, items, itemLabel, isBooking, onC
     if (file.size > 5 * 1024 * 1024) { setUploadError('File too large. Max 5 MB.'); return }
     setUploading(true)
     setUploadError(null)
-    const ext  = file.name.split('.').pop() ?? 'jpg'
+    const upload = await compressImage(file)
+    const ext  = upload.name.split('.').pop() ?? 'jpg'
     const path = `${userId}/${vendor.id}_room_${Date.now()}.${ext}`
-    const { data, error } = await supabase.storage.from('item-images').upload(path, file, { upsert: true })
+    const { data, error } = await supabase.storage.from('item-images').upload(path, upload, { upsert: true })
     if (error) {
       setUploadError(`Upload failed: ${error.message}`)
     } else if (data) {
