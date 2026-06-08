@@ -33,6 +33,7 @@ export interface CheckoutResult {
   success: boolean
   short_order_id?: string
   total_price?: number
+  order_token?: string
   error?: string
 }
 
@@ -110,7 +111,7 @@ export async function checkoutToWhatsApp(
       notes:            payload.notes.trim() || null,
       status:           'pending',
     })
-    .select('short_order_id, total_price')
+    .select('short_order_id, total_price, order_token')
     .single()
 
   if (!error) {
@@ -118,6 +119,7 @@ export async function checkoutToWhatsApp(
       success:        true,
       short_order_id: data.short_order_id as string,
       total_price:    Number(data.total_price),
+      order_token:    data.order_token as string,
     }
   }
 

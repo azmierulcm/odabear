@@ -4,6 +4,10 @@ import { useState, useMemo, useEffect, useRef } from 'react'
 import Image from 'next/image'
 import { createClient } from '@/lib/supabase/client'
 import { compressImage } from '@/lib/compressImage'
+import { isDuitNowQr } from '@/lib/duitnowQr'
+import { decodeQrFromFile } from '@/lib/decodeQrImage'
+import { waUrl } from '@/lib/whatsapp'
+import { getReceiptSignedUrl } from './actions'
 import type { Vendor, Category, Item, Order, OrderStatus, PaymentMethod, BusinessType, Booking, BookingStatus } from '@/types/menu'
 
 type Tab = 'profile' | 'rooms' | 'main' | 'activity' | 'settings'
@@ -1752,6 +1756,36 @@ function OrdersTab({ vendor, supabase }: {
     await supabase.from('orders').update({ status }).eq('id', orderId)
   }
 
+  // ── Payment verification (QR-payment flow) ──
+  const [receiptBusy,  setReceiptBusy]  = useState<string | null>(null)
+  const [receiptError, setReceiptError] = useState<string | null>(null)
+
+  const viewReceipt = async (orderId: string) => {
+    setReceiptBusy(orderId)
+    setReceiptError(null)
+    const res = await getReceiptSignedUrl(orderId)
+    setReceiptBusy(null)
+    if (res.url) window.open(res.url, '_blank', 'noopener,noreferrer')
+    else setReceiptError(orderId)
+  }
+
+  // Confirming payment also takes the order: a still-pending order advances to "accepted".
+  const confirmPayment = async (orderId: string) => {
+    const target = orders.find((o) => o.id === orderId)
+    const advance = target?.status === 'pending' || target?.status === 'pending_whatsapp'
+    setOrders((prev) => prev.map((o) => o.id === orderId
+      ? { ...o, payment_status: 'confirmed', status: advance ? 'accepted' : o.status }
+      : o))
+    await supabase.from('orders')
+      .update({ payment_status: 'confirmed', ...(advance ? { status: 'accepted' } : {}) })
+      .eq('id', orderId)
+  }
+
+  const rejectPayment = async (orderId: string) => {
+    setOrders((prev) => prev.map((o) => o.id === orderId ? { ...o, payment_status: 'rejected' } : o))
+    await supabase.from('orders').update({ payment_status: 'rejected' }).eq('id', orderId)
+  }
+
   // Filter by search query (order ID or customer name)
   const q = search.trim().toLowerCase()
   const filtered = q
@@ -1823,6 +1857,11 @@ function OrdersTab({ vendor, supabase }: {
       {paginated.map((order) => {
         const cfg = STATUS_CONFIG[order.status] ?? STATUS_CONFIG.pending
         const isDelivery = order.delivery_type === 'delivery'
+        const firstName  = order.customer_name.split(' ')[0]
+        // One-tap WhatsApp to tell the customer their payment went through.
+        const confirmUrl = order.customer_phone
+          ? waUrl(order.customer_phone, `Hi ${firstName}! Your payment for order ${order.short_order_id} (RM ${Number(order.total_price).toFixed(2)}) is confirmed ✅ We're preparing your order now. Thank you!`)
+          : null
 
         return (
           <div key={order.id} className="bg-white rounded-2xl border border-border overflow-hidden">
@@ -1908,6 +1947,79 @@ function OrdersTab({ vendor, supabase }: {
                 </div>
               )}
 
+              {/* ── Payment receipt: review + confirm/reject ── */}
+              {order.payment_status === 'submitted' && (
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs font-bold text-blue-800 uppercase tracking-wide">💳 Payment receipt uploaded</p>
+                    {order.payment_submitted_at && (
+                      <span className="text-xs text-blue-700 shrink-0">{timeAgo(order.payment_submitted_at)}</span>
+                    )}
+                  </div>
+                  <p className="text-sm text-ink">
+                    Check the receipt shows <span className="font-bold">RM {Number(order.total_price).toFixed(2)}</span> in your account before confirming.
+                  </p>
+                  <button onClick={() => viewReceipt(order.id)} disabled={receiptBusy === order.id}
+                    className="w-full border border-blue-300 bg-white text-blue-700 font-semibold rounded-xl py-2.5 text-sm hover:bg-blue-100 transition-colors disabled:opacity-50">
+                    {receiptBusy === order.id ? 'Opening…' : '🧾 View receipt'}
+                  </button>
+                  {receiptError === order.id && (
+                    <p className="text-xs text-brand">Couldn’t open the receipt. Please try again.</p>
+                  )}
+                  <div className="flex items-center gap-3">
+                    <button onClick={() => confirmPayment(order.id)}
+                      className="flex-1 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-xl py-2.5 text-sm transition-colors">
+                      ✓ Confirm payment
+                    </button>
+                    <button onClick={() => rejectPayment(order.id)}
+                      className="flex-1 border border-red-200 text-brand font-semibold rounded-xl py-2.5 text-sm hover:bg-red-50 transition-colors">
+                      Reject
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {order.payment_status === 'confirmed' && (
+                <div className="bg-green-50 border border-green-200 rounded-xl p-3 space-y-2.5">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm">💰</span>
+                    <p className="text-sm font-semibold text-green-800">Payment confirmed</p>
+                    {order.payment_proof_url && (
+                      <button onClick={() => viewReceipt(order.id)} disabled={receiptBusy === order.id}
+                        className="ml-auto text-xs font-semibold text-green-700 underline underline-offset-2 disabled:opacity-50">
+                        {receiptBusy === order.id ? 'Opening…' : 'View receipt'}
+                      </button>
+                    )}
+                  </div>
+                  {confirmUrl && (
+                    <a href={confirmUrl} target="_blank" rel="noopener noreferrer"
+                      className="w-full bg-[#25D366] hover:bg-[#1ebe5d] text-white font-semibold rounded-xl py-2.5 text-sm flex items-center justify-center gap-2 transition-colors">
+                      📲 Tell {firstName} it’s confirmed
+                    </a>
+                  )}
+                </div>
+              )}
+
+              {order.payment_status === 'rejected' && (
+                <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-xl px-4 py-2.5">
+                  <span className="text-sm">⚠️</span>
+                  <p className="text-sm font-semibold text-brand">Payment rejected — customer asked to retry</p>
+                  {order.payment_proof_url && (
+                    <button onClick={() => viewReceipt(order.id)} disabled={receiptBusy === order.id}
+                      className="ml-auto text-xs font-semibold text-brand underline underline-offset-2 disabled:opacity-50">
+                      {receiptBusy === order.id ? 'Opening…' : 'View'}
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {order.payment_status === 'awaiting' && order.order_token && (vendor.payment_methods?.length ?? 0) > 0 && (
+                <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5">
+                  <span className="text-sm">⏳</span>
+                  <p className="text-sm font-medium text-amber-800">Waiting for customer to pay &amp; upload receipt</p>
+                </div>
+              )}
+
               {/* ── Actions ── */}
               {(order.status === 'pending' || order.status === 'pending_whatsapp') && (
                 <div className="flex items-center gap-3">
@@ -1982,9 +2094,9 @@ function OrdersTab({ vendor, supabase }: {
 // ─── Settings Tab ────────────────────────────────────────────
 
 type PMDraft =
-  | { type: 'duitnow'; recipient_name: string; id: string; qr_url?: string }
-  | { type: 'paynow';  recipient_name: string; id: string; qr_url?: string }
-  | { type: 'bank';    bank_name: string; account_number: string; account_name: string; qr_url?: string }
+  | { type: 'duitnow'; recipient_name: string; id: string; qr_url?: string; duitnow_payload?: string }
+  | { type: 'paynow';  recipient_name: string; id: string; qr_url?: string; duitnow_payload?: string }
+  | { type: 'bank';    bank_name: string; account_number: string; account_name: string; qr_url?: string; duitnow_payload?: string }
 
 const emptyDraft = (type: PMDraft['type']): PMDraft => {
   if (type === 'bank') return { type: 'bank', bank_name: '', account_number: '', account_name: '' }
@@ -2015,12 +2127,20 @@ function SettingsTab({ userId, vendor, onSaved, supabase }: {
     setUploadError(null)
     const ext = file.name.split('.').pop() ?? 'png'
     const path = `${userId}/${vendor.id}_${idx}_${Date.now()}.${ext}`
-    const { data, error } = await supabase.storage.from('payment-qr').upload(path, file, { upsert: true })
+
+    // Read the QR (so checkout can auto-fill the amount) and upload the image together.
+    const [decoded, uploadRes] = await Promise.all([
+      decodeQrFromFile(file).catch(() => null),
+      supabase.storage.from('payment-qr').upload(path, file, { upsert: true }),
+    ])
+
+    const { data, error } = uploadRes
     if (error) {
       setUploadError(`Upload failed: ${error.message}`)
     } else if (data) {
       const { data: urlData } = supabase.storage.from('payment-qr').getPublicUrl(data.path)
-      updateMethod(idx, { qr_url: urlData.publicUrl })
+      const duitnow_payload = decoded && isDuitNowQr(decoded) ? decoded : undefined
+      updateMethod(idx, { qr_url: urlData.publicUrl, duitnow_payload })
     }
     setUploadingIdx(null)
   }
@@ -2103,7 +2223,7 @@ function SettingsTab({ userId, vendor, onSaved, supabase }: {
                   </Field>
                 </div>
               )}
-              <QrUploadField qrUrl={m.qr_url} uploading={uploadingIdx === i} onUpload={(file) => handleQrUpload(file, i)} onRemove={() => updateMethod(i, { qr_url: undefined })} />
+              <QrUploadField qrUrl={m.qr_url} autoAmount={!!m.duitnow_payload} uploading={uploadingIdx === i} onUpload={(file) => handleQrUpload(file, i)} onRemove={() => updateMethod(i, { qr_url: undefined, duitnow_payload: undefined })} />
             </div>
           ))}
         </div>
@@ -2237,8 +2357,8 @@ function LogoUploadField({ logoUrl, uploading, onUpload, onRemove }: {
   )
 }
 
-function QrUploadField({ qrUrl, uploading, onUpload, onRemove }: {
-  qrUrl?: string; uploading: boolean; onUpload: (file: File) => void; onRemove: () => void
+function QrUploadField({ qrUrl, autoAmount, uploading, onUpload, onRemove }: {
+  qrUrl?: string; autoAmount?: boolean; uploading: boolean; onUpload: (file: File) => void; onRemove: () => void
 }) {
   const fileRef = useRef<HTMLInputElement>(null)
   return (
@@ -2250,7 +2370,9 @@ function QrUploadField({ qrUrl, uploading, onUpload, onRemove }: {
         <div className="flex items-center gap-4">
           <img src={qrUrl} alt="QR" className="w-20 h-20 object-contain rounded-xl border border-border bg-surface" />
           <div className="space-y-2">
-            <p className="text-xs text-green-700 font-semibold">QR uploaded ✓</p>
+            {autoAmount
+              ? <p className="text-xs text-green-700 font-semibold">Uploaded ✓ · Amount fills in automatically when scanned</p>
+              : <p className="text-xs text-fog font-semibold">Uploaded ✓ · Customers will type the amount themselves</p>}
             <button type="button" onClick={() => fileRef.current?.click()} className="block text-xs text-ink underline underline-offset-2">Replace</button>
             <button type="button" onClick={onRemove} className="block text-xs text-brand underline underline-offset-2">Remove</button>
           </div>

@@ -100,6 +100,15 @@ export default function MenuClient({ vendor, categories }: Props) {
       return
     }
 
+    setCart([])
+
+    // New flow: send the customer to their order status / payment page.
+    if (result.order_token) {
+      window.location.href = `/order/${result.order_token}`
+      return
+    }
+
+    // Fallback (legacy DBs without a token): hand off to WhatsApp directly.
     const waUrl = buildWhatsAppUrl(
       vendor.phone_number,
       result.short_order_id!,
@@ -111,14 +120,9 @@ export default function MenuClient({ vendor, categories }: Props) {
       mName,
       mPhone,
     )
-
-    setCart([])
     setMOrderId(result.short_order_id!)
     setMobileStage('confirmed')
     setMBusy(false)
-
-    // window.location.href works on mobile without popup-blocker issues
-    // (opens WhatsApp app directly; browser page remains in background)
     window.location.href = waUrl
   }
 
@@ -537,6 +541,14 @@ function DesktopCartPanel({ cart, vendor, onUpdate, onClearCart, totalPrice, sup
       return
     }
 
+    // New flow: send the customer to their order status / payment page.
+    if (result.order_token) {
+      onClearCart()
+      window.location.href = `/order/${result.order_token}`
+      return
+    }
+
+    // Fallback (legacy DBs without a token): hand off to WhatsApp directly.
     const waUrl = buildWhatsAppUrl(
       vendor.phone_number,
       result.short_order_id!,
@@ -548,7 +560,6 @@ function DesktopCartPanel({ cart, vendor, onUpdate, onClearCart, totalPrice, sup
       name,
       phone,
     )
-
     setOrderId(result.short_order_id!)
     setStage('confirmed')
     setBusy(false)

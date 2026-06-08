@@ -1,9 +1,11 @@
 export type BusinessType = 'restaurant' | 'retail' | 'booking'
 
+// duitnow_payload: the raw EMVCo string decoded from the uploaded QR. When present,
+// checkout can inject the order amount so the customer's banking app pre-fills it.
 export type PaymentMethod =
-  | { type: 'duitnow'; recipient_name: string; id: string; qr_url?: string }
-  | { type: 'paynow';  recipient_name: string; id: string; qr_url?: string }
-  | { type: 'bank';    bank_name: string; account_number: string; account_name: string; qr_url?: string }
+  | { type: 'duitnow'; recipient_name: string; id: string; qr_url?: string; duitnow_payload?: string }
+  | { type: 'paynow';  recipient_name: string; id: string; qr_url?: string; duitnow_payload?: string }
+  | { type: 'bank';    bank_name: string; account_number: string; account_name: string; qr_url?: string; duitnow_payload?: string }
 
 export type Vendor = {
   id: string
@@ -54,6 +56,13 @@ export type CartItem = {
 
 export type OrderStatus = 'pending' | 'pending_whatsapp' | 'accepted' | 'cancelled' | 'completed'
 
+// Payment lifecycle, tracked separately from fulfilment status:
+//   awaiting  → order placed, customer hasn't paid yet
+//   submitted → customer uploaded a receipt, vendor to review
+//   confirmed → vendor verified the payment
+//   rejected  → vendor rejected it (wrong amount, unreadable, etc.)
+export type PaymentStatus = 'awaiting' | 'submitted' | 'confirmed' | 'rejected'
+
 export type OrderLineItem = {
   name: string
   price: number
@@ -72,6 +81,10 @@ export type Order = {
   delivery_type: 'pickup' | 'delivery'
   delivery_address: string | null
   status: OrderStatus
+  payment_status: PaymentStatus
+  order_token: string
+  payment_proof_url: string | null
+  payment_submitted_at: string | null
   notes: string | null
   created_at: string
 }
@@ -91,6 +104,10 @@ export type Booking = {
   end_date: string
   notes: string | null
   status: BookingStatus
+  payment_status: PaymentStatus
+  booking_token: string
+  payment_proof_url: string | null
+  payment_submitted_at: string | null
   created_at: string
   staff_log?: LogEntry[]
 }
