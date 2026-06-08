@@ -409,22 +409,37 @@ function ProfileTab({ userId, vendor, businessType, onSaved, supabase }: {
             </Field>
           )}
 
-          <Field
-            label="Makanjom Listing (optional)"
-            hint={
-              parseMakanjomId(makanjomUrl)
-                ? <span className="text-emerald-600 font-semibold">✓ Linked — customers who discover you on Makanjom will be directed here</span>
-                : 'Paste your Makanjom restaurant page URL to link the two platforms'
-            }
-          >
-            <input
-              type="text"
-              value={makanjomUrl}
-              onChange={(e) => setMakanjomUrl(e.target.value)}
-              placeholder="https://makanjom.com/restaurants/..."
-              className={inputCls}
-            />
-          </Field>
+          {businessType === 'restaurant' && (
+            <div className="bg-gradient-to-br from-orange-50 to-rose-50 border border-orange-200/70 rounded-2xl p-4 space-y-3">
+              <div className="flex items-center gap-2">
+                <span className="text-lg shrink-0">🍽️</span>
+                <p className="text-sm font-bold text-ink">Get found by more hungry customers</p>
+                <span className="ml-auto shrink-0 text-[10px] font-bold uppercase tracking-wide text-orange-700 bg-orange-100 px-2 py-0.5 rounded-full">Free</span>
+              </div>
+              <p className="text-xs text-fog leading-relaxed">
+                Makanjom is where Malaysians go to discover places to eat. Link your Makanjom page below and a &quot;Discover on Makanjom&quot; button will appear on your menu — sending more people your way, at no extra cost.
+              </p>
+              <input
+                type="text"
+                value={makanjomUrl}
+                onChange={(e) => setMakanjomUrl(e.target.value)}
+                placeholder="Paste your Makanjom page link here"
+                className={inputCls}
+              />
+              <p className="text-xs">
+                {parseMakanjomId(makanjomUrl) ? (
+                  <span className="text-emerald-600 font-semibold">✓ Linked — the button is now live on your menu</span>
+                ) : (
+                  <span className="text-fog">
+                    Not on Makanjom yet?{' '}
+                    <a href="https://makanjom.com/vendor" target="_blank" rel="noopener noreferrer" className="text-brand font-semibold underline underline-offset-2">
+                      Create your free listing →
+                    </a>
+                  </span>
+                )}
+              </p>
+            </div>
+          )}
 
           {message && (
             <p className={`text-sm rounded-xl px-4 py-2.5 ${message.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-brand'}`}>
@@ -981,16 +996,19 @@ function AvailabilityTab({ vendor, onVendorUpdate, supabase, items, onItemUpdate
   const selectedRoom = items.find((i) => i.id === selectedRoomId) ?? null
 
   const roomBookedDateMap = useMemo(() => {
-    if (!selectedRoom) return {} as Record<string, BookingStatus>
-    const map: Record<string, BookingStatus> = {}
+    if (!selectedRoom) return {} as Record<string, 'confirmed' | 'pending'>
+    const map: Record<string, 'confirmed' | 'pending'> = {}
     bookings
       .filter((b) => b.status !== 'cancelled' && b.service_name === selectedRoom.name)
       .forEach((b) => {
+        // Any non-pending, non-cancelled stage (confirmed/holding/cleared/completed)
+        // occupies the room — display it the same as a confirmed booking.
+        const display = b.status === 'pending' ? 'pending' : 'confirmed'
         const start = new Date(b.start_date)
         const end   = new Date(b.end_date)
         for (const d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
           const key = d.toISOString().split('T')[0]
-          if (map[key] !== 'confirmed') map[key] = b.status
+          if (map[key] !== 'confirmed') map[key] = display
         }
       })
     return map
@@ -1410,7 +1428,7 @@ function BookingsTab({ vendor, supabase }: {
     setLogSaving(false)
   }
 
-  const nightsOf = (b: Booking) =>
+  const daysOf = (b: Booking) =>
     Math.max(1, Math.round((new Date(b.end_date).getTime() - new Date(b.start_date).getTime()) / 86400000))
 
   if (loading) return <div className="text-sm text-fog text-center py-16">Loading…</div>
@@ -1482,7 +1500,7 @@ function BookingsTab({ vendor, supabase }: {
                 </div>
                 <div className="text-right shrink-0">
                   <p className="text-xs font-semibold text-ink">{b.service_name}</p>
-                  <p className="text-[10px] text-fog mt-0.5">{nightsOf(b)} night{nightsOf(b) !== 1 ? 's' : ''}</p>
+                  <p className="text-[10px] text-fog mt-0.5">{daysOf(b)} day{daysOf(b) !== 1 ? 's' : ''}</p>
                 </div>
               </div>
               <div className="flex items-center gap-2 text-xs text-fog">
@@ -1527,8 +1545,8 @@ function BookingsTab({ vendor, supabase }: {
                   {[
                     { label: 'Guest',     value: selected.customer_name },
                     { label: 'Phone',     value: selected.customer_phone || '—' },
-                    { label: 'Room',      value: selected.service_name || '—' },
-                    { label: 'Duration',  value: `${nightsOf(selected)} night${nightsOf(selected) !== 1 ? 's' : ''}` },
+                    { label: 'Service / Room', value: selected.service_name || '—' },
+                    { label: 'Duration',  value: `${daysOf(selected)} day${daysOf(selected) !== 1 ? 's' : ''}` },
                     { label: 'Check-in',  value: selected.start_date },
                     { label: 'Check-out', value: selected.end_date },
                   ].map(({ label, value }) => (
@@ -1546,8 +1564,8 @@ function BookingsTab({ vendor, supabase }: {
                   </div>
                   <div className="divide-y divide-surface text-sm">
                     <div className="flex justify-between px-4 py-2.5">
-                      <span className="text-fog">Nights</span>
-                      <span className="font-semibold text-ink">{nightsOf(selected)}</span>
+                      <span className="text-fog">Days</span>
+                      <span className="font-semibold text-ink">{daysOf(selected)}</span>
                     </div>
                     <div className="flex justify-between px-4 py-2.5">
                       <span className="text-fog">Payment status</span>
@@ -1652,6 +1670,13 @@ function BookingsTab({ vendor, supabase }: {
                   <div className="bg-surface rounded-xl p-4 text-center">
                     <p className="text-sm font-semibold text-ink">✓ Archived</p>
                     <p className="text-xs text-fog mt-0.5">This booking is complete.</p>
+                  </div>
+                )}
+
+                {stageOf(selected) === 'cancelled' && (
+                  <div className="bg-surface rounded-xl p-4 text-center">
+                    <p className="text-sm font-semibold text-ink">✗ Declined / Cancelled</p>
+                    <p className="text-xs text-fog mt-0.5">This booking is no longer active.</p>
                   </div>
                 )}
               </section>

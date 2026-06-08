@@ -201,16 +201,6 @@ export default function BookingClient({ vendor, categories, bookings = [] }: Pro
               <p className="text-sm text-fog mt-0.5">{allItems.length} service{allItems.length !== 1 ? 's' : ''} available</p>
             </div>
           </div>
-          {vendor.makanjom_restaurant_id && (
-            <a
-              href={`https://makanjom.com/restaurants/${vendor.makanjom_restaurant_id}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-2 rounded-full border border-neutral-200 bg-white px-4 py-2 text-xs font-semibold text-neutral-600 shadow-sm hover:border-neutral-300 hover:text-neutral-900 transition shrink-0"
-            >
-              <span>🍽️</span> Discover on Makanjom
-            </a>
-          )}
         </div>
       </div>
 

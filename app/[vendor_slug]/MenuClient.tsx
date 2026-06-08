@@ -185,7 +185,7 @@ export default function MenuClient({ vendor, categories }: Props) {
               <p className="text-sm text-fog mt-0.5">{totalItemCount} items</p>
             </div>
           </div>
-          {vendor.makanjom_restaurant_id && (
+          {vendor.business_type === 'restaurant' && vendor.makanjom_restaurant_id && (
             <a
               href={`https://makanjom.com/restaurants/${vendor.makanjom_restaurant_id}`}
               target="_blank"
