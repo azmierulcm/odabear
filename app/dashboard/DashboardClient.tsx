@@ -1747,17 +1747,11 @@ function OrdersTab({ vendor, supabase }: {
           const incoming = payload.new as Order
           setOrders((prev) => [incoming, ...prev])
           setPage(1)
-          // New orders always auto-expand so the vendor sees them immediately.
-          setExpandedIds((prev) => new Set([...prev, incoming.id]))
         })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders', filter: `vendor_id=eq.${vendor.id}` },
         (payload) => {
           const updated = payload.new as Order
           setOrders((prev) => prev.map((o) => o.id === updated.id ? updated : o))
-          // Auto-expand when a receipt arrives (customer uploaded while card was collapsed).
-          if (updated.payment_status === 'submitted') {
-            setExpandedIds((prev) => new Set([...prev, updated.id]))
-          }
         })
       .subscribe()
 
@@ -1799,24 +1793,8 @@ function OrdersTab({ vendor, supabase }: {
     await supabase.from('orders').update({ payment_status: 'rejected' }).eq('id', orderId)
   }
 
-  // ── Collapsible cards ──
-  // An order "needs action" if it is new (pending) or has a receipt waiting.
-  // These auto-expand; everything else starts collapsed.
-  const needsAction = (o: Order) =>
-    o.status === 'pending' ||
-    o.status === 'pending_whatsapp' ||
-    o.payment_status === 'submitted'
-
+  // ── Collapsible cards — all collapsed by default, tap to expand ──
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
-
-  // Initialise expanded set once orders first load (replaces empty loading state).
-  const didInitExpand = useRef(false)
-  useEffect(() => {
-    if (!didInitExpand.current && orders.length > 0) {
-      didInitExpand.current = true
-      setExpandedIds(new Set(orders.filter(needsAction).map((o) => o.id)))
-    }
-  }, [orders]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleExpand = (id: string) =>
     setExpandedIds((prev) => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s })
