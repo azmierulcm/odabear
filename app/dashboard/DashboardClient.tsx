@@ -1743,9 +1743,22 @@ function OrdersTab({ vendor, supabase }: {
 
     const channel = supabase.channel(`orders:${vendor.id}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders', filter: `vendor_id=eq.${vendor.id}` },
-        (payload) => { setOrders((prev) => [payload.new as Order, ...prev]); setPage(1) })
+        (payload) => {
+          const incoming = payload.new as Order
+          setOrders((prev) => [incoming, ...prev])
+          setPage(1)
+          // New orders always auto-expand so the vendor sees them immediately.
+          setExpandedIds((prev) => new Set([...prev, incoming.id]))
+        })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders', filter: `vendor_id=eq.${vendor.id}` },
-        (payload) => setOrders((prev) => prev.map((o) => o.id === (payload.new as Order).id ? payload.new as Order : o)))
+        (payload) => {
+          const updated = payload.new as Order
+          setOrders((prev) => prev.map((o) => o.id === updated.id ? updated : o))
+          // Auto-expand when a receipt arrives (customer uploaded while card was collapsed).
+          if (updated.payment_status === 'submitted') {
+            setExpandedIds((prev) => new Set([...prev, updated.id]))
+          }
+        })
       .subscribe()
 
     return () => { supabase.removeChannel(channel) }
@@ -1785,6 +1798,28 @@ function OrdersTab({ vendor, supabase }: {
     setOrders((prev) => prev.map((o) => o.id === orderId ? { ...o, payment_status: 'rejected' } : o))
     await supabase.from('orders').update({ payment_status: 'rejected' }).eq('id', orderId)
   }
+
+  // ── Collapsible cards ──
+  // An order "needs action" if it is new (pending) or has a receipt waiting.
+  // These auto-expand; everything else starts collapsed.
+  const needsAction = (o: Order) =>
+    o.status === 'pending' ||
+    o.status === 'pending_whatsapp' ||
+    o.payment_status === 'submitted'
+
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
+
+  // Initialise expanded set once orders first load (replaces empty loading state).
+  const didInitExpand = useRef(false)
+  useEffect(() => {
+    if (!didInitExpand.current && orders.length > 0) {
+      didInitExpand.current = true
+      setExpandedIds(new Set(orders.filter(needsAction).map((o) => o.id)))
+    }
+  }, [orders]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const toggleExpand = (id: string) =>
+    setExpandedIds((prev) => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s })
 
   // Filter by search query (order ID or customer name)
   const q = search.trim().toLowerCase()
@@ -1853,199 +1888,239 @@ function OrdersTab({ vendor, supabase }: {
         </div>
       )}
 
-      {/* ── Order cards ── */}
+      {/* ── Order cards (collapsible) ── */}
       {paginated.map((order) => {
-        const cfg = STATUS_CONFIG[order.status] ?? STATUS_CONFIG.pending
-        const isDelivery = order.delivery_type === 'delivery'
+        const cfg        = STATUS_CONFIG[order.status] ?? STATUS_CONFIG.pending
+        const isDelivery = order.delivery_type === "delivery"
         const firstName  = order.customer_name.split(' ')[0]
+        const isOpen     = expandedIds.has(order.id)
+        const totalStr   = `RM ${Number(order.total_price).toFixed(2)}`
+
         // One-tap WhatsApp to tell the customer their payment went through.
         const confirmUrl = order.customer_phone
-          ? waUrl(order.customer_phone, `Hi ${firstName}! Your payment for order ${order.short_order_id} (RM ${Number(order.total_price).toFixed(2)}) is confirmed ✅ We're preparing your order now. Thank you!`)
+          ? waUrl(order.customer_phone, `Hi ${firstName}! Your payment for order ${order.short_order_id} (RM ${Number(order.total_price).toFixed(2)}) is confirmed ✅ We are preparing your order now. Thank you!`)
           : null
 
         return (
           <div key={order.id} className="bg-white rounded-2xl border border-border overflow-hidden">
 
-            {/* ── Top bar: order ID + time + status ── */}
-            <div className="flex items-center justify-between gap-3 px-5 py-3 bg-surface border-b border-border">
-              <div className="flex items-center gap-2">
-                <span className="font-mono font-bold text-ink tracking-wider">
-                  {order.short_order_id ?? `#${order.id.slice(-6).toUpperCase()}`}
-                </span>
-                <span className="text-xs text-fog">{timeAgo(order.created_at)}</span>
+            {/* ── Collapsed header (always visible, tap to toggle) ── */}
+            <button
+              onClick={() => toggleExpand(order.id)}
+              className="w-full text-left px-5 py-4 flex flex-col gap-2 hover:bg-surface/60 transition-colors active:bg-surface"
+            >
+              {/* Row 1: order ID + time + status + chevron */}
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="font-mono font-bold text-ink tracking-wider text-sm shrink-0">
+                    {order.short_order_id ?? `#${order.id.slice(-6).toUpperCase()}`}
+                  </span>
+                  <span className="text-xs text-fog shrink-0">{timeAgo(order.created_at)}</span>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border ${cfg.bg} ${cfg.text} border-current/20`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
+                    {cfg.label}
+                  </span>
+                  <span className={`text-fog text-sm transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}>▾</span>
+                </div>
               </div>
-              <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border shrink-0 ${cfg.bg} ${cfg.text} border-current/20`}>
-                <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
-                {cfg.label}
-              </span>
-            </div>
 
-            <div className="p-5 space-y-4">
-
-              {/* ── Customer info ── */}
-              <div className="flex items-start justify-between gap-4">
-                <div className="space-y-0.5">
-                  <p className="font-semibold text-ink">{order.customer_name}</p>
-                  {order.customer_phone && (
-                    <a href={`tel:${order.customer_phone}`} className="text-xs text-brand underline">
-                      📞 {order.customer_phone}
-                    </a>
+              {/* Row 2: customer + delivery + total + action indicators */}
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0 flex-wrap">
+                  <span className="text-sm font-semibold text-ink truncate">{order.customer_name}</span>
+                  <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${
+                    isDelivery ? "bg-blue-50 text-blue-700" : "bg-surface text-fog"
+                  }`}>
+                    {isDelivery ? "🛵" : "🛍️"} {isDelivery ? "Delivery" : "Pickup"}
+                  </span>
+                  {order.notes && <span className="text-xs text-fog">📝</span>}
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  {order.payment_status === "submitted" && (
+                    <span className="inline-flex items-center gap-1 text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full">
+                      <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+                      Receipt
+                    </span>
                   )}
-                </div>
-
-                {/* Delivery type badge */}
-                <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full shrink-0 ${
-                  isDelivery
-                    ? 'bg-blue-50 text-blue-700 border border-blue-200'
-                    : 'bg-surface text-fog border border-border'
-                }`}>
-                  {isDelivery ? '🛵 Delivery' : '🛍️ Self Pickup'}
-                </span>
-              </div>
-
-              {/* ── Delivery address ── */}
-              {isDelivery && order.delivery_address && (
-                <div className="flex items-start gap-2 bg-blue-50 border border-blue-100 rounded-xl px-4 py-3">
-                  <span className="text-sm shrink-0 mt-0.5">📍</span>
-                  <div>
-                    <p className="text-xs font-semibold text-blue-700 mb-0.5">Delivery address</p>
-                    <p className="text-sm text-ink leading-snug">{order.delivery_address}</p>
-                  </div>
-                </div>
-              )}
-
-              {/* ── Items ── */}
-              <div className="border border-border rounded-xl overflow-hidden">
-                <div className="px-4 py-2 bg-surface border-b border-border">
-                  <p className="text-xs font-semibold text-fog uppercase tracking-wide">Items ordered</p>
-                </div>
-                <ul className="divide-y divide-surface">
-                  {(order.items ?? []).map((li, i) => (
-                    <li key={i} className="flex items-center justify-between px-4 py-2.5 text-sm">
-                      <span className="text-ink">
-                        <span className="font-semibold text-fog mr-1.5">{li.quantity}×</span>
-                        {li.name}
-                      </span>
-                      <span className="tabular-nums text-fog font-medium">RM {(li.price * li.quantity).toFixed(2)}</span>
-                    </li>
-                  ))}
-                </ul>
-                <div className="flex justify-between items-center px-4 py-2.5 bg-surface border-t border-border">
-                  <span className="text-sm font-bold text-ink">Total</span>
-                  <span className="font-bold text-ink tabular-nums">RM {Number(order.total_price).toFixed(2)}</span>
-                </div>
-              </div>
-
-              {/* ── Notes ── */}
-              {order.notes && (
-                <div className="flex items-start gap-2 bg-yellow-50 border border-yellow-100 rounded-xl px-4 py-3">
-                  <span className="text-sm shrink-0 mt-0.5">📝</span>
-                  <div>
-                    <p className="text-xs font-semibold text-yellow-700 mb-0.5">Customer notes</p>
-                    <p className="text-sm text-ink italic">"{order.notes}"</p>
-                  </div>
-                </div>
-              )}
-
-              {/* ── Payment receipt: review + confirm/reject ── */}
-              {order.payment_status === 'submitted' && (
-                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-xs font-bold text-blue-800 uppercase tracking-wide">💳 Payment receipt uploaded</p>
-                    {order.payment_submitted_at && (
-                      <span className="text-xs text-blue-700 shrink-0">{timeAgo(order.payment_submitted_at)}</span>
-                    )}
-                  </div>
-                  <p className="text-sm text-ink">
-                    Check the receipt shows <span className="font-bold">RM {Number(order.total_price).toFixed(2)}</span> in your account before confirming.
-                  </p>
-                  <button onClick={() => viewReceipt(order.id)} disabled={receiptBusy === order.id}
-                    className="w-full border border-blue-300 bg-white text-blue-700 font-semibold rounded-xl py-2.5 text-sm hover:bg-blue-100 transition-colors disabled:opacity-50">
-                    {receiptBusy === order.id ? 'Opening…' : '🧾 View receipt'}
-                  </button>
-                  {receiptError === order.id && (
-                    <p className="text-xs text-brand">Couldn’t open the receipt. Please try again.</p>
+                  {order.payment_status === "confirmed" && (
+                    <span className="text-xs text-green-700 font-semibold">&#x1F4B0; Paid</span>
                   )}
-                  <div className="flex items-center gap-3">
-                    <button onClick={() => confirmPayment(order.id)}
-                      className="flex-1 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-xl py-2.5 text-sm transition-colors">
-                      ✓ Confirm payment
-                    </button>
-                    <button onClick={() => rejectPayment(order.id)}
-                      className="flex-1 border border-red-200 text-brand font-semibold rounded-xl py-2.5 text-sm hover:bg-red-50 transition-colors">
-                      Reject
-                    </button>
-                  </div>
+                  <span className="text-sm font-bold text-ink tabular-nums">{totalStr}</span>
                 </div>
-              )}
+              </div>
+            </button>
 
-              {order.payment_status === 'confirmed' && (
-                <div className="bg-green-50 border border-green-200 rounded-xl p-3 space-y-2.5">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm">💰</span>
-                    <p className="text-sm font-semibold text-green-800">Payment confirmed</p>
-                    {order.payment_proof_url && (
+            {/* ── Expanded body ── */}
+            {isOpen && (
+              <div className="border-t border-border">
+                <div className="p-5 space-y-4">
+
+                  {/* ── Customer info ── */}
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="space-y-0.5">
+                      <p className="font-semibold text-ink">{order.customer_name}</p>
+                      {order.customer_phone && (
+                        <a href={`tel:${order.customer_phone}`} className="text-xs text-brand underline">
+                          📞 {order.customer_phone}
+                        </a>
+                      )}
+                    </div>
+                    <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full shrink-0 ${
+                      isDelivery
+                        ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                        : 'bg-surface text-fog border border-border'
+                    }`}>
+                      {isDelivery ? '🛵 Delivery' : '🛍️ Self Pickup'}
+                    </span>
+                  </div>
+
+                  {/* ── Delivery address ── */}
+                  {isDelivery && order.delivery_address && (
+                    <div className="flex items-start gap-2 bg-blue-50 border border-blue-100 rounded-xl px-4 py-3">
+                      <span className="text-sm shrink-0 mt-0.5">📍</span>
+                      <div>
+                        <p className="text-xs font-semibold text-blue-700 mb-0.5">Delivery address</p>
+                        <p className="text-sm text-ink leading-snug">{order.delivery_address}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── Items ── */}
+                  <div className="border border-border rounded-xl overflow-hidden">
+                    <div className="px-4 py-2 bg-surface border-b border-border">
+                      <p className="text-xs font-semibold text-fog uppercase tracking-wide">Items ordered</p>
+                    </div>
+                    <ul className="divide-y divide-surface">
+                      {(order.items ?? []).map((li, i) => (
+                        <li key={i} className="flex items-center justify-between px-4 py-2.5 text-sm">
+                          <span className="text-ink">
+                            <span className="font-semibold text-fog mr-1.5">{li.quantity}×</span>
+                            {li.name}
+                          </span>
+                          <span className="tabular-nums text-fog font-medium">RM {(li.price * li.quantity).toFixed(2)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                    <div className="flex justify-between items-center px-4 py-2.5 bg-surface border-t border-border">
+                      <span className="text-sm font-bold text-ink">Total</span>
+                      <span className="font-bold text-ink tabular-nums">{totalStr}</span>
+                    </div>
+                  </div>
+
+                  {/* ── Notes ── */}
+                  {order.notes && (
+                    <div className="flex items-start gap-2 bg-yellow-50 border border-yellow-100 rounded-xl px-4 py-3">
+                      <span className="text-sm shrink-0 mt-0.5">📝</span>
+                      <div>
+                        <p className="text-xs font-semibold text-yellow-700 mb-0.5">Customer notes</p>
+                        <p className="text-sm text-ink italic">&ldquo;{order.notes}&rdquo;</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── Payment receipt: review + confirm/reject ── */}
+                  {order.payment_status === 'submitted' && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-xs font-bold text-blue-800 uppercase tracking-wide">💳 Payment receipt uploaded</p>
+                        {order.payment_submitted_at && (
+                          <span className="text-xs text-blue-700 shrink-0">{timeAgo(order.payment_submitted_at)}</span>
+                        )}
+                      </div>
+                      <p className="text-sm text-ink">
+                        Check the receipt shows <span className="font-bold">RM {Number(order.total_price).toFixed(2)}</span> in your account before confirming.
+                      </p>
                       <button onClick={() => viewReceipt(order.id)} disabled={receiptBusy === order.id}
-                        className="ml-auto text-xs font-semibold text-green-700 underline underline-offset-2 disabled:opacity-50">
-                        {receiptBusy === order.id ? 'Opening…' : 'View receipt'}
+                        className="w-full border border-blue-300 bg-white text-blue-700 font-semibold rounded-xl py-2.5 text-sm hover:bg-blue-100 transition-colors disabled:opacity-50">
+                        {receiptBusy === order.id ? 'Opening…' : '🧾 View receipt'}
                       </button>
-                    )}
-                  </div>
-                  {confirmUrl && (
-                    <a href={confirmUrl} target="_blank" rel="noopener noreferrer"
-                      className="w-full bg-[#25D366] hover:bg-[#1ebe5d] text-white font-semibold rounded-xl py-2.5 text-sm flex items-center justify-center gap-2 transition-colors">
-                      📲 Tell {firstName} it’s confirmed
-                    </a>
+                      {receiptError === order.id && (
+                        <p className="text-xs text-brand">Couldn&apos;t open the receipt. Please try again.</p>
+                      )}
+                      <div className="flex items-center gap-3">
+                        <button onClick={() => confirmPayment(order.id)}
+                          className="flex-1 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-xl py-2.5 text-sm transition-colors">
+                          ✓ Confirm payment
+                        </button>
+                        <button onClick={() => rejectPayment(order.id)}
+                          className="flex-1 border border-red-200 text-brand font-semibold rounded-xl py-2.5 text-sm hover:bg-red-50 transition-colors">
+                          Reject
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {order.payment_status === 'confirmed' && (
+                    <div className="bg-green-50 border border-green-200 rounded-xl p-3 space-y-2.5">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm">💰</span>
+                        <p className="text-sm font-semibold text-green-800">Payment confirmed</p>
+                        {order.payment_proof_url && (
+                          <button onClick={() => viewReceipt(order.id)} disabled={receiptBusy === order.id}
+                            className="ml-auto text-xs font-semibold text-green-700 underline underline-offset-2 disabled:opacity-50">
+                            {receiptBusy === order.id ? 'Opening…' : 'View receipt'}
+                          </button>
+                        )}
+                      </div>
+                      {confirmUrl && (
+                        <a href={confirmUrl} target="_blank" rel="noopener noreferrer"
+                          className="w-full bg-[#25D366] hover:bg-[#1ebe5d] text-white font-semibold rounded-xl py-2.5 text-sm flex items-center justify-center gap-2 transition-colors">
+                          📲 Tell {firstName} it&apos;s confirmed
+                        </a>
+                      )}
+                    </div>
+                  )}
+
+                  {order.payment_status === 'rejected' && (
+                    <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-xl px-4 py-2.5">
+                      <span className="text-sm">⚠️</span>
+                      <p className="text-sm font-semibold text-brand">Payment rejected — customer asked to retry</p>
+                      {order.payment_proof_url && (
+                        <button onClick={() => viewReceipt(order.id)} disabled={receiptBusy === order.id}
+                          className="ml-auto text-xs font-semibold text-brand underline underline-offset-2 disabled:opacity-50">
+                          {receiptBusy === order.id ? 'Opening…' : 'View'}
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  {order.payment_status === 'awaiting' && order.order_token && (vendor.payment_methods?.length ?? 0) > 0 && (
+                    <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5">
+                      <span className="text-sm">⏳</span>
+                      <p className="text-sm font-medium text-amber-800">Waiting for customer to pay &amp; upload receipt</p>
+                    </div>
+                  )}
+
+                  {/* ── Actions ── */}
+                  {(order.status === 'pending' || order.status === 'pending_whatsapp') && (
+                    <div className="flex items-center gap-3">
+                      <button onClick={() => updateStatus(order.id, 'accepted')}
+                        className="flex-1 bg-gradient-to-r from-brand-dark to-brand text-white font-semibold rounded-xl py-2.5 text-sm hover:opacity-90 transition-opacity">
+                        Accept
+                      </button>
+                      <button onClick={() => updateStatus(order.id, 'cancelled')}
+                        className="flex-1 border border-border text-fog font-semibold rounded-xl py-2.5 text-sm hover:border-ink hover:text-ink transition-colors">
+                        Cancel
+                      </button>
+                    </div>
+                  )}
+                  {order.status === 'accepted' && (
+                    <div className="flex items-center gap-3">
+                      <button onClick={() => updateStatus(order.id, 'completed')}
+                        className="flex-1 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-xl py-2.5 text-sm transition-colors">
+                        Mark completed
+                      </button>
+                      <button onClick={() => updateStatus(order.id, 'cancelled')}
+                        className="flex-1 border border-border text-fog font-semibold rounded-xl py-2.5 text-sm hover:border-ink hover:text-ink transition-colors">
+                        Cancel
+                      </button>
+                    </div>
                   )}
                 </div>
-              )}
-
-              {order.payment_status === 'rejected' && (
-                <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-xl px-4 py-2.5">
-                  <span className="text-sm">⚠️</span>
-                  <p className="text-sm font-semibold text-brand">Payment rejected — customer asked to retry</p>
-                  {order.payment_proof_url && (
-                    <button onClick={() => viewReceipt(order.id)} disabled={receiptBusy === order.id}
-                      className="ml-auto text-xs font-semibold text-brand underline underline-offset-2 disabled:opacity-50">
-                      {receiptBusy === order.id ? 'Opening…' : 'View'}
-                    </button>
-                  )}
-                </div>
-              )}
-
-              {order.payment_status === 'awaiting' && order.order_token && (vendor.payment_methods?.length ?? 0) > 0 && (
-                <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5">
-                  <span className="text-sm">⏳</span>
-                  <p className="text-sm font-medium text-amber-800">Waiting for customer to pay &amp; upload receipt</p>
-                </div>
-              )}
-
-              {/* ── Actions ── */}
-              {(order.status === 'pending' || order.status === 'pending_whatsapp') && (
-                <div className="flex items-center gap-3">
-                  <button onClick={() => updateStatus(order.id, 'accepted')}
-                    className="flex-1 bg-gradient-to-r from-brand-dark to-brand text-white font-semibold rounded-xl py-2.5 text-sm hover:opacity-90 transition-opacity">
-                    Accept
-                  </button>
-                  <button onClick={() => updateStatus(order.id, 'cancelled')}
-                    className="flex-1 border border-border text-fog font-semibold rounded-xl py-2.5 text-sm hover:border-ink hover:text-ink transition-colors">
-                    Cancel
-                  </button>
-                </div>
-              )}
-              {order.status === 'accepted' && (
-                <div className="flex items-center gap-3">
-                  <button onClick={() => updateStatus(order.id, 'completed')}
-                    className="flex-1 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-xl py-2.5 text-sm transition-colors">
-                    Mark completed
-                  </button>
-                  <button onClick={() => updateStatus(order.id, 'cancelled')}
-                    className="flex-1 border border-border text-fog font-semibold rounded-xl py-2.5 text-sm hover:border-ink hover:text-ink transition-colors">
-                    Cancel
-                  </button>
-                </div>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         )
       })}
