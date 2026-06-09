@@ -88,14 +88,20 @@ export default function OrderStatusClient({
     <div className="min-h-screen bg-surface">
       <div className="max-w-lg mx-auto px-4 py-8 space-y-5">
 
-        {/* Header */}
-        <div className="text-center space-y-1">
+        {/* Header — logo only until the customer has paid */}
+        <div className="flex justify-center pt-2">
           {vendorLogo
-            ? <img src={vendorLogo} alt={vendorName} className="w-14 h-14 rounded-full object-cover mx-auto border border-border" />
-            : <div className="w-14 h-14 rounded-full bg-brand text-white font-bold text-lg flex items-center justify-center mx-auto">{vendorName[0]?.toUpperCase()}</div>}
-          <h1 className="text-xl font-bold text-ink pt-1">Thank you, {customerFirstName}!</h1>
-          <p className="text-sm text-fog">Your order with <span className="font-semibold text-ink">{vendorName}</span> is in.</p>
+            ? <img src={vendorLogo} alt={vendorName} className="w-14 h-14 rounded-full object-cover border border-border" />
+            : <div className="w-14 h-14 rounded-full bg-brand text-white font-bold text-lg flex items-center justify-center">{vendorName[0]?.toUpperCase()}</div>}
         </div>
+
+        {/* Thank-you message — only shown once receipt is submitted */}
+        {status === 'submitted' && (
+          <div className="text-center space-y-1">
+            <h1 className="text-xl font-bold text-ink">Thank you, {customerFirstName}!</h1>
+            <p className="text-sm text-fog">Your order is being processed — <span className="font-semibold text-ink">{vendorName}</span> is confirming your payment.</p>
+          </div>
+        )}
 
         {/* Reference + status */}
         <div className="bg-white rounded-2xl border border-border p-5 flex items-center justify-between">
