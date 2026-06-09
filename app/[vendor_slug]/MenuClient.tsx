@@ -355,12 +355,40 @@ export default function MenuClient({ vendor, categories }: Props) {
               <>
                 <DrawerHeader title="Payment" onBack={() => setMobileStage('checkout')} onClose={closeDrawer} />
                 <div className="overflow-y-auto flex-1 px-5 py-5 space-y-4">
+
+                  {/* ── Order confirmation summary ── */}
+                  <div className="bg-surface rounded-2xl border border-border p-4 space-y-3">
+                    <h3 className="text-xs font-bold text-ink uppercase tracking-wide">Order summary</h3>
+
+                    {/* Customer details */}
+                    <div className="space-y-1 text-sm">
+                      <p className="text-ink font-semibold">{mName}</p>
+                      {mPhone && <p className="text-fog">{mPhone}</p>}
+                      <p className="text-fog">{mDelivery === 'delivery' ? `Delivery${mAddress ? ` — ${mAddress}` : ''}` : 'Self pickup'}</p>
+                    </div>
+
+                    {/* Items */}
+                    <div className="border-t border-border pt-3 space-y-1.5">
+                      {cart.map((ci, i) => (
+                        <div key={i} className="flex justify-between text-sm">
+                          <span className="text-ink">{ci.quantity}&times; {ci.item.name}</span>
+                          <span className="text-fog tabular-nums">RM {(ci.item.price * ci.quantity).toFixed(2)}</span>
+                        </div>
+                      ))}
+                      <div className="flex justify-between font-bold text-ink pt-2 border-t border-border">
+                        <span>Total</span>
+                        <span className="tabular-nums">RM {totalPrice.toFixed(2)}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* ── Payment method ── */}
                   {vendor.payment_methods?.length > 0
                     ? <>
-                        <p className="text-sm text-fog">Scan or transfer using the details below, then place your order.</p>
+                        <p className="text-sm text-fog">Transfer using the details below, then place your order.</p>
                         {vendor.payment_methods.map((pm, i) => <PaymentMethodCard key={i} method={pm} />)}
                       </>
-                    : <p className="text-sm text-fog text-center py-10">Pay directly to the vendor — they will confirm payment on WhatsApp.</p>
+                    : <p className="text-sm text-fog text-center py-4">Pay directly to the vendor — they will confirm payment on WhatsApp.</p>
                   }
                 </div>
                 <div className="px-5 pb-8 pt-4 border-t border-border shrink-0 space-y-3">
