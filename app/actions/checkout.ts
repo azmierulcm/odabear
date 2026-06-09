@@ -1,7 +1,6 @@
 'use server'
 
 import { z } from 'zod'
-import { createClient } from '@/lib/supabase/server'
 import { adminSupabase } from '@/lib/supabase/admin'
 
 // ─── Validation schema ────────────────────────────────────────
@@ -88,13 +87,28 @@ export async function checkoutToWhatsApp(
     return { success: false, error: 'Too many orders. Please wait a minute and try again.' }
   }
 
-  // 4. Use user-scoped client — RLS ensures vendor is active before insert
-  const supabase = await createClient()
+  // 4. Verify the vendor is active before inserting.
+  //    We do this explicitly in code rather than relying on an RLS INSERT policy,
+  //    because customers are anonymous (anon role) and Postgres's INSERT … RETURNING
+  //    requires *both* INSERT and SELECT RLS policies to pass. There is no anon
+  //    SELECT policy on orders (vendors only), so using the user-scoped client with
+  //    .select() after insert always fails for unauthenticated customers — even when
+  //    the INSERT policy itself would allow it. Using adminSupabase here bypasses RLS
+  //    entirely; the vendor-active guard below replaces the safety that RLS provided.
+  const { data: vendorCheck } = await adminSupabase
+    .from('vendors')
+    .select('id')
+    .eq('id', payload.vendor_id)
+    .eq('is_active', true)
+    .maybeSingle()
+  if (!vendorCheck) {
+    return { success: false, error: 'This shop is not accepting orders right now.' }
+  }
 
   const short_order_id = makeShortOrderId()
 
   // ── Attempt 1: full insert with all columns ───────────────
-  const { data, error } = await supabase
+  const { data, error } = await adminSupabase
     .from('orders')
     .insert({
       vendor_id:        payload.vendor_id,
@@ -135,7 +149,7 @@ export async function checkoutToWhatsApp(
       .filter(Boolean)
       .join(' | ')
 
-    const { error: fallbackError } = await supabase
+    const { error: fallbackError } = await adminSupabase
       .from('orders')
       .insert({
         vendor_id:      payload.vendor_id,
