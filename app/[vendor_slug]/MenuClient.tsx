@@ -382,14 +382,8 @@ export default function MenuClient({ vendor, categories }: Props) {
                     </div>
                   </div>
 
-                  {/* ── Payment method ── */}
-                  {vendor.payment_methods?.length > 0
-                    ? <>
-                        <p className="text-sm text-fog">Transfer using the details below, then place your order.</p>
-                        {vendor.payment_methods.map((pm, i) => <PaymentMethodCard key={i} method={pm} />)}
-                      </>
-                    : <p className="text-sm text-fog text-center py-4">Pay directly to the vendor — they will confirm payment on WhatsApp.</p>
-                  }
+                  {/* Payment details are shown on the /order/[token] page after checkout,
+                      where the QR is pre-filled with the exact amount. Nothing to show here. */}
                 </div>
                 <div className="px-5 pb-8 pt-4 border-t border-border shrink-0 space-y-3">
                   <OrderSummaryLine totalItems={totalItems} totalPrice={totalPrice} />

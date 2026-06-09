@@ -156,6 +156,24 @@ export default function OrderStatusClient({
                     onToggleStatic={() => setShowStatic((s) => ({ ...s, [i]: !s[i] }))}
                     onSaveQr={saveQr} />
                 ))}
+
+                {/* Step-by-step payment instructions */}
+                <ol className="space-y-2.5 pt-1">
+                  {[
+                    { n: '1', title: 'Save the QR Code', desc: 'Tap "Save QR" below the code, or screenshot it.' },
+                    { n: '2', title: 'Open your payment app', desc: 'Launch Maybank MAE, CIMB OCTO, or ShopeePay.' },
+                    { n: '3', title: 'Scan from gallery', desc: 'Tap Scan, then choose the saved QR image from your photo gallery.' },
+                    { n: '4', title: 'Upload your receipt', desc: 'Screenshot your successful payment and upload it below to confirm your order.' },
+                  ].map(({ n, title, desc }) => (
+                    <li key={n} className="flex gap-3">
+                      <span className="w-5 h-5 rounded-full bg-brand text-white text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">{n}</span>
+                      <div>
+                        <p className="text-xs font-semibold text-ink">{title}</p>
+                        <p className="text-xs text-fog leading-snug">{desc}</p>
+                      </div>
+                    </li>
+                  ))}
+                </ol>
               </div>
             ) : (
               <div className="bg-white rounded-2xl border border-border p-5 text-sm text-fog">
