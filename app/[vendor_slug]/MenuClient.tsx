@@ -714,12 +714,7 @@ function PaymentMethodCard({ method }: { method: PaymentMethod }) {
           <p className="text-sm text-fog">{method.account_name}</p>
         </div>
       )}
-      {method.qr_url && (
-        <div className="flex flex-col items-center pt-1">
-          <img src={method.qr_url} alt={`${label} QR code`} className="w-40 h-40 object-contain rounded-xl border border-border" />
-          <p className="text-xs text-fog mt-2">Scan to pay</p>
-        </div>
-      )}
+      {/* QR not shown here — the order status page shows a dynamic amount-filled QR after checkout */}
     </div>
   )
 }

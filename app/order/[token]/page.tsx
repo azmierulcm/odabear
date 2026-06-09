@@ -44,8 +44,35 @@ export default async function OrderStatusPage({ params }: { params: Promise<{ to
     }),
   )
 
-  const ref = o.short_order_id
+  const ref   = o.short_order_id
   const amount = total.toFixed(2)
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://jomoda.vercel.app'
+  const orderUrl = `${siteUrl}/order/${token}`
+
+  // Rich "I've paid" message the customer sends to the vendor via WhatsApp.
+  const itemLines = items
+    .map((it) => `• ${it.quantity}x ${it.name} — RM ${(it.price * it.quantity).toFixed(2)}`)
+    .join('\n')
+  const deliveryLine = o.delivery_type === 'delivery'
+    ? `Mode: Delivery\nAddress: ${o.delivery_address ?? '—'}`
+    : 'Mode: Self pickup'
+  const notifyMsg = [
+    `🚨 New Order #${ref}`,
+    '─────────────────────',
+    `Name: ${o.customer_name}`,
+    o.customer_phone ? `Phone: ${o.customer_phone}` : null,
+    deliveryLine,
+    '',
+    'Items:',
+    itemLines,
+    '',
+    `Total Paid: RM ${amount}`,
+    '',
+    `🧾 Order & receipt proof:`,
+    orderUrl,
+    '─────────────────────',
+    'Please verify the payment in your bank app, then confirm in your dashboard.',
+  ].filter((l) => l !== null).join('\n')
 
   return (
     <OrderStatusClient
@@ -59,7 +86,7 @@ export default async function OrderStatusPage({ params }: { params: Promise<{ to
       initialPaymentStatus={o.payment_status}
       payments={payments}
       waUrl={waUrl(v.phone_number, `Hello! About my order ${ref} (RM ${amount}).`)}
-      notifyPaidUrl={waUrl(v.phone_number, `Hi! I've paid RM ${amount} for order ${ref} and uploaded my receipt. Please confirm when you can 🙏`)}
+      notifyPaidUrl={waUrl(v.phone_number, notifyMsg)}
     />
   )
 }

@@ -166,19 +166,19 @@ export default function OrderStatusClient({
             {/* Receipt upload */}
             <div className="bg-white rounded-2xl border border-border p-5 space-y-3">
               <h2 className="text-sm font-bold text-ink">Upload your receipt</h2>
-              {status === 'submitted' ? (
+              {status === "submitted" ? (
                 <div className="space-y-3">
                   <p className="text-sm text-blue-700 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3">
-                    Receipt received ✓ — waiting for {vendorName} to confirm your payment.
+                    Receipt received &#10003; &mdash; waiting for {vendorName} to confirm your payment.
                   </p>
+                  {/* Single combined button: sends vendor a rich order summary + receipt link */}
                   <a href={notifyPaidUrl} target="_blank" rel="noopener noreferrer"
-                    className="w-full bg-[#25D366] hover:bg-[#1ebe5d] text-white font-semibold rounded-xl py-3 flex items-center justify-center gap-2 transition-colors">
-                    📲 Tell {vendorName} you’ve paid
+                    className="w-full bg-[#25D366] hover:bg-[#1ebe5d] text-white font-semibold rounded-xl py-3.5 flex items-center justify-center gap-2 transition-colors">
+                    &#128242; Send order summary to {vendorName}
                   </a>
-                  <p className="text-xs text-fog text-center">A quick message helps {vendorName} confirm faster.</p>
                   <button onClick={() => fileRef.current?.click()} disabled={uploading}
-                    className="text-xs font-semibold text-brand underline underline-offset-2 disabled:opacity-50">
-                    {uploading ? 'Uploading…' : 'Uploaded the wrong one? Upload again'}
+                    className="w-full text-xs font-semibold text-fog underline underline-offset-2 disabled:opacity-50 text-center">
+                    {uploading ? "Uploading..." : "Uploaded the wrong one? Upload again"}
                   </button>
                 </div>
               ) : (
@@ -186,8 +186,8 @@ export default function OrderStatusClient({
                   <p className="text-xs text-fog">After paying, upload a screenshot of your receipt so {vendorName} can confirm.</p>
                   <button onClick={() => fileRef.current?.click()} disabled={uploading}
                     className="w-full border-2 border-dashed border-border rounded-xl py-6 flex flex-col items-center gap-1 text-fog hover:border-ink hover:text-ink transition-colors disabled:opacity-50">
-                    <span className="text-2xl">{uploading ? '⏳' : '📤'}</span>
-                    <span className="text-xs font-semibold">{uploading ? 'Uploading…' : 'I’ve paid — upload receipt'}</span>
+                    <span className="text-2xl">{uploading ? "⏳" : "📤"}</span>
+                    <span className="text-xs font-semibold">{uploading ? "Uploading..." : "I’ve paid — upload receipt"}</span>
                   </button>
                 </>
               )}
@@ -198,9 +198,9 @@ export default function OrderStatusClient({
           </>
         )}
 
-        {/* Contact */}
+        {/* Contact — hidden when status is submitted (the richer notify button above covers it) */}
         <a href={waUrl} target="_blank" rel="noopener noreferrer"
-          className="w-full bg-[#25D366] hover:bg-[#1ebe5d] text-white font-semibold rounded-xl py-3.5 flex items-center justify-center gap-2 transition-colors">
+          className={`w-full bg-[#25D366] hover:bg-[#1ebe5d] text-white font-semibold rounded-xl py-3.5 flex items-center justify-center gap-2 transition-colors ${status === 'submitted' ? 'hidden' : ''}`}>
           Message {vendorName} on WhatsApp
         </a>
 
