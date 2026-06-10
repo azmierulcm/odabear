@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useEffect, useRef } from 'react'
+import { useState, useMemo, useEffect, useRef, useSyncExternalStore } from 'react'
 import Image from 'next/image'
 import { createClient } from '@/lib/supabase/client'
 import { compressImage } from '@/lib/compressImage'
@@ -9,9 +9,11 @@ import { decodeQrFromFile } from '@/lib/decodeQrImage'
 import { waUrl } from '@/lib/whatsapp'
 import { getReceiptSignedUrl } from './actions'
 import { getBookingReceiptSignedUrl } from '@/app/booking/[token]/actions'
-import type { Vendor, Category, Item, Order, OrderStatus, PaymentMethod, BusinessType, Booking, BookingStatus } from '@/types/menu'
+import { buildReceipt } from '@/lib/escpos'
+import { isBluetoothPrintingSupported, isConnected, connectPrinter, printBytes, type PrinterConnection } from '@/lib/btPrinter'
+import type { Vendor, Category, Item, Order, OrderStatus, OrderLineItem, PaymentMethod, PaymentStatus, BusinessType, Booking, BookingStatus } from '@/types/menu'
 
-type Tab = 'profile' | 'rooms' | 'main' | 'activity' | 'settings'
+type Tab = 'profile' | 'rooms' | 'main' | 'activity' | 'analytics' | 'settings'
 
 interface Props {
   userId: string
@@ -63,17 +65,19 @@ export default function DashboardClient({ userId, vendor: initialVendor, initial
 
   const tabConfig: { id: Tab; label: string }[] = businessType === 'booking'
     ? [
-        { id: 'profile',  label: 'Profile' },
-        { id: 'rooms',    label: 'Rooms & Services' },
-        { id: 'main',     label: 'Availability' },
-        { id: 'activity', label: 'Bookings' },
-        { id: 'settings', label: 'Settings' },
+        { id: 'profile',   label: 'Profile' },
+        { id: 'rooms',     label: 'Rooms & Services' },
+        { id: 'main',      label: 'Availability' },
+        { id: 'activity',  label: 'Bookings' },
+        { id: 'analytics', label: 'Sales' },
+        { id: 'settings',  label: 'Settings' },
       ]
     : [
-        { id: 'profile',  label: 'Profile' },
-        { id: 'main',     label: businessType === 'retail' ? 'Products' : 'Menu' },
-        { id: 'activity', label: 'Orders' },
-        { id: 'settings', label: 'Settings' },
+        { id: 'profile',   label: 'Profile' },
+        { id: 'main',      label: businessType === 'retail' ? 'Products' : 'Menu' },
+        { id: 'activity',  label: 'Orders' },
+        { id: 'analytics', label: 'Sales' },
+        { id: 'settings',  label: 'Settings' },
       ]
 
   return (
@@ -126,6 +130,11 @@ export default function DashboardClient({ userId, vendor: initialVendor, initial
         <OrdersTab vendor={vendor} supabase={supabase} />
       )}
       {tab === 'activity' && !vendor && <SetupPrompt onGoToProfile={() => setTab('profile')} />}
+
+      {tab === 'analytics' && vendor && (
+        <AnalyticsTab vendor={vendor} businessType={businessType} supabase={supabase} />
+      )}
+      {tab === 'analytics' && !vendor && <SetupPrompt onGoToProfile={() => setTab('profile')} />}
 
       {tab === 'settings' && vendor && (
         <SettingsTab userId={userId} vendor={vendor} onSaved={(v) => setVendor(v)} supabase={supabase} />
@@ -1830,6 +1839,226 @@ function timeAgo(dateStr: string) {
 
 const ORDERS_PER_PAGE = 10
 
+// Stable refs for useSyncExternalStore (Bluetooth support is a one-shot read —
+// it never changes during a session, so the subscribe is a no-op).
+const btNoopSubscribe = () => () => {}
+const btServerSnapshot = () => false
+
+// ─── Analytics / Sales ──────────────────────────────────────────
+// A normalised sale, so confirmed orders and confirmed bookings can share
+// the same revenue + top-seller maths.
+interface SaleRecord {
+  id: string
+  total: number
+  paymentStatus: PaymentStatus
+  createdAt: string
+  lines: { name: string; quantity: number; revenue: number }[]
+}
+
+type SalesPeriod = '7d' | '30d' | 'all'
+
+const SALES_PERIODS: { id: SalesPeriod; label: string }[] = [
+  { id: '7d',  label: 'This week' },
+  { id: '30d', label: 'This month' },
+  { id: 'all', label: 'All time' },
+]
+
+function AnalyticsTab({ vendor, businessType, supabase }: {
+  vendor: Vendor
+  businessType: BusinessType
+  supabase: ReturnType<typeof createClient>
+}) {
+  const isBooking = businessType === 'booking'
+  const noun      = isBooking ? 'bookings' : 'orders'
+
+  const [records, setRecords] = useState<SaleRecord[]>([])
+  const [loading, setLoading] = useState(true)
+  const [period,  setPeriod]  = useState<SalesPeriod>('7d')
+  // "Now" is captured when data loads (not read during render) so the stats
+  // useMemo below stays a pure, deterministic derivation.
+  const [now, setNow] = useState(0)
+
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true)
+      if (isBooking) {
+        const { data } = await supabase
+          .from('bookings')
+          .select('id, total_price, payment_status, created_at, service_name')
+          .eq('vendor_id', vendor.id)
+        const rows = (data ?? []) as Booking[]
+        setRecords(rows.map((b) => {
+          const total = Number(b.total_price ?? 0)
+          return {
+            id:            b.id,
+            total,
+            paymentStatus: b.payment_status,
+            createdAt:     b.created_at,
+            lines:         [{ name: b.service_name, quantity: 1, revenue: total }],
+          }
+        }))
+      } else {
+        const { data } = await supabase
+          .from('orders')
+          .select('id, total_price, payment_status, created_at, items, cart_items')
+          .eq('vendor_id', vendor.id)
+        const rows = (data ?? []) as Order[]
+        setRecords(rows.map((o) => {
+          const lineItems = ((o.items?.length ? o.items : o.cart_items) ?? []) as OrderLineItem[]
+          return {
+            id:            o.id,
+            total:         Number(o.total_price ?? 0),
+            paymentStatus: o.payment_status,
+            createdAt:     o.created_at,
+            lines:         lineItems.map((li) => ({
+              name:    li.name,
+              quantity: li.quantity,
+              revenue: li.price * li.quantity,
+            })),
+          }
+        }))
+      }
+      setNow(Date.now())
+      setLoading(false)
+    }
+    load()
+  }, [vendor.id, supabase, isBooking])
+
+  const stats = useMemo(() => {
+    const cutoff = period === 'all'
+      ? 0
+      : now - (period === '7d' ? 7 : 30) * 86_400_000
+    const inPeriod  = records.filter((r) => new Date(r.createdAt).getTime() >= cutoff)
+    const confirmed = inPeriod.filter((r) => r.paymentStatus === 'confirmed')
+
+    const revenue  = confirmed.reduce((s, r) => s + r.total, 0)
+    const awaiting = inPeriod
+      .filter((r) => r.paymentStatus === 'awaiting' || r.paymentStatus === 'submitted')
+      .reduce((s, r) => s + r.total, 0)
+    const avg = confirmed.length ? revenue / confirmed.length : 0
+
+    // Top sellers, by confirmed revenue
+    const map = new Map<string, { quantity: number; revenue: number }>()
+    for (const r of confirmed) {
+      for (const l of r.lines) {
+        const cur = map.get(l.name) ?? { quantity: 0, revenue: 0 }
+        cur.quantity += l.quantity
+        cur.revenue  += l.revenue
+        map.set(l.name, cur)
+      }
+    }
+    const topSellers = [...map.entries()]
+      .map(([name, v]) => ({ name, ...v }))
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, 5)
+
+    return { revenue, awaiting, avg, confirmedCount: confirmed.length, periodCount: inPeriod.length, topSellers }
+  }, [records, period, now])
+
+  if (loading) {
+    return (
+      <div className="space-y-4">
+        <div className="h-11 rounded-xl bg-surface animate-pulse" />
+        <div className="grid grid-cols-2 gap-3">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="h-24 rounded-2xl bg-surface animate-pulse" />
+          ))}
+        </div>
+        <div className="h-48 rounded-2xl bg-surface animate-pulse" />
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-5">
+
+      {/* Period toggle */}
+      <div className="inline-flex rounded-xl bg-surface p-1 border border-border">
+        {SALES_PERIODS.map((p) => (
+          <button
+            key={p.id}
+            onClick={() => setPeriod(p.id)}
+            className={`px-3.5 py-2 text-xs font-semibold rounded-lg transition-colors min-h-[40px] ${
+              period === p.id ? 'bg-white text-ink shadow-sm' : 'text-fog hover:text-ink'
+            }`}
+          >
+            {p.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Stat cards */}
+      <div className="grid grid-cols-2 gap-3">
+        <StatCard
+          label="Revenue"
+          value={`RM ${stats.revenue.toFixed(2)}`}
+          sub={`${stats.confirmedCount} paid ${noun}`}
+          accent
+        />
+        <StatCard
+          label={`Paid ${noun}`}
+          value={String(stats.confirmedCount)}
+          sub={`of ${stats.periodCount} total`}
+        />
+        <StatCard
+          label="Awaiting payment"
+          value={`RM ${stats.awaiting.toFixed(2)}`}
+          sub="not yet confirmed"
+        />
+        <StatCard
+          label="Average sale"
+          value={`RM ${stats.avg.toFixed(2)}`}
+          sub={stats.confirmedCount ? 'per paid order' : 'no sales yet'}
+        />
+      </div>
+
+      {/* Top sellers */}
+      <div className="bg-white rounded-2xl border border-border p-5">
+        <h3 className="text-sm font-bold text-ink mb-3">Top sellers</h3>
+        {stats.topSellers.length === 0 ? (
+          <p className="text-sm text-fog">No confirmed sales in this period yet.</p>
+        ) : (
+          <ol className="space-y-3">
+            {stats.topSellers.map((s, i) => (
+              <li key={s.name} className="flex items-center gap-3">
+                <span className="w-6 h-6 rounded-full bg-surface text-fog text-xs font-bold flex items-center justify-center shrink-0">
+                  {i + 1}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-ink truncate">{s.name}</p>
+                  <p className="text-xs text-fog">{s.quantity} sold</p>
+                </div>
+                <span className="text-sm font-bold text-ink tabular-nums shrink-0">
+                  RM {s.revenue.toFixed(2)}
+                </span>
+              </li>
+            ))}
+          </ol>
+        )}
+      </div>
+
+      <p className="text-center text-xs text-fog">
+        Revenue counts only {noun} with a confirmed payment.
+      </p>
+    </div>
+  )
+}
+
+function StatCard({ label, value, sub, accent }: {
+  label: string
+  value: string
+  sub?: string
+  accent?: boolean
+}) {
+  return (
+    <div className={`rounded-2xl border p-4 ${accent ? 'border-brand/30 bg-brand/5' : 'border-border bg-white'}`}>
+      <p className="text-[11px] text-fog font-semibold uppercase tracking-wide">{label}</p>
+      <p className={`text-xl font-bold mt-1 tabular-nums ${accent ? 'text-brand' : 'text-ink'}`}>{value}</p>
+      {sub && <p className="text-[11px] text-fog mt-0.5">{sub}</p>}
+    </div>
+  )
+}
+
 function OrdersTab({ vendor, supabase }: {
   vendor: Vendor
   supabase: ReturnType<typeof createClient>
@@ -1901,6 +2130,59 @@ function OrdersTab({ vendor, supabase }: {
   const rejectPayment = async (orderId: string) => {
     setOrders((prev) => prev.map((o) => o.id === orderId ? { ...o, payment_status: 'rejected' } : o))
     await supabase.from('orders').update({ payment_status: 'rejected' }).eq('id', orderId)
+  }
+
+  // ── Bluetooth receipt printing (58mm thermal, Web Bluetooth) ──
+  // Feature-detected via useSyncExternalStore so the button renders only where
+  // it works (Android/desktop Chrome) and never on iOS, with no hydration
+  // mismatch — server snapshot is false, client snapshot reads navigator.
+  const btSupported = useSyncExternalStore(btNoopSubscribe, isBluetoothPrintingSupported, btServerSnapshot)
+  const printerRef = useRef<PrinterConnection | null>(null)
+  const [printingId, setPrintingId] = useState<string | null>(null)
+  const [printError, setPrintError] = useState<{ id: string; msg: string } | null>(null)
+
+  const printReceipt = async (order: Order) => {
+    setPrintingId(order.id)
+    setPrintError(null)
+    try {
+      // Reconnect only if we have no live connection (a vendor connects once,
+      // then reuses the printer for every subsequent receipt that session).
+      if (!isConnected(printerRef.current)) {
+        printerRef.current = await connectPrinter()
+      }
+      const conn = printerRef.current
+      if (!conn) throw new Error('no-gatt')
+      const bytes = buildReceipt({
+        shopName:      vendor.name,
+        shopPhone:     vendor.phone_number,
+        orderId:       order.short_order_id ?? order.id.slice(-6).toUpperCase(),
+        dateStr:       new Date(order.created_at).toLocaleString('en-GB', {
+          day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
+        }),
+        customerName:  order.customer_name,
+        customerPhone: order.customer_phone,
+        mode:          order.delivery_type === 'delivery' ? 'Delivery' : 'Self Pickup',
+        address:       order.delivery_type === 'delivery' ? order.delivery_address : null,
+        items:         (order.items ?? []).map((li) => ({ name: li.name, quantity: li.quantity, price: li.price })),
+        total:         Number(order.total_price),
+        notes:         order.notes,
+      })
+      await printBytes(conn, bytes)
+    } catch (e) {
+      printerRef.current = null
+      const name = (e as { name?: string })?.name
+      const msg  = e instanceof Error ? e.message : ''
+      // User dismissed the device chooser — not an error worth surfacing.
+      if (name === 'NotFoundError') { setPrintingId(null); return }
+      if (msg === 'unsupported') {
+        setPrintError({ id: order.id, msg: 'This browser does not support Bluetooth printing. Use Chrome on Android.' })
+      } else if (msg === 'no-writable-characteristic' || msg === 'no-gatt') {
+        setPrintError({ id: order.id, msg: 'This printer is not compatible with browser printing (Bluetooth Classic only).' })
+      } else {
+        setPrintError({ id: order.id, msg: 'Could not print. Make sure the printer is on and nearby, then try again.' })
+      }
+    }
+    setPrintingId(null)
   }
 
   // ── Collapsible cards — all collapsed by default, tap to expand ──
@@ -2178,6 +2460,19 @@ function OrdersTab({ vendor, supabase }: {
                     <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5">
                       <span className="text-sm">⏳</span>
                       <p className="text-sm font-medium text-amber-800">Waiting for customer to pay &amp; upload receipt</p>
+                    </div>
+                  )}
+
+                  {/* ── Print receipt (58mm Bluetooth) ── */}
+                  {btSupported && (
+                    <div className="space-y-1.5">
+                      <button onClick={() => printReceipt(order)} disabled={printingId === order.id}
+                        className="w-full border border-border text-ink font-semibold rounded-xl py-2.5 text-sm hover:border-ink transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
+                        🖨️ {printingId === order.id ? 'Printing…' : 'Print receipt'}
+                      </button>
+                      {printError?.id === order.id && (
+                        <p className="text-xs text-brand">{printError.msg}</p>
+                      )}
                     </div>
                   )}
 
