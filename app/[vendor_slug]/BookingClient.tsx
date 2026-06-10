@@ -1,7 +1,9 @@
 'use client'
 
 import { useState, useRef, useMemo, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { createBooking } from '@/app/actions/booking'
 import type { Vendor, CategoryWithItems, Item } from '@/types/menu'
 
 interface BookingRecord {
@@ -16,14 +18,8 @@ interface Props {
   bookings?: BookingRecord[]  // non-cancelled bookings with service name
 }
 
-function makeShortBookingId(): string {
-  const CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
-  let suffix = ''
-  for (let i = 0; i < 4; i++) suffix += CHARS[Math.floor(Math.random() * CHARS.length)]
-  return `BKG-${suffix}`
-}
-
 export default function BookingClient({ vendor, categories, bookings = [] }: Props) {
+  const router   = useRouter()
   const services = categories.flatMap((c) => c.items.filter((i) => i.is_available))
   const allItems  = categories.flatMap((c) => c.items)
 
@@ -35,7 +31,8 @@ export default function BookingClient({ vendor, categories, bookings = [] }: Pro
   const [guestPhone, setGuestPhone] = useState('')
   const [notes, setNotes]           = useState('')
   const [drawerOpen, setDrawerOpen] = useState(false)
-  const [submitted, setSubmitted]   = useState(false)
+  const [submitting,   setSubmitting]   = useState(false)
+  const [submitError,  setSubmitError]  = useState<string | null>(null)
 
   const supabase = useMemo(() => createClient(), [])
 
@@ -121,55 +118,32 @@ export default function BookingClient({ vendor, categories, bookings = [] }: Pro
 
   const canRequest = !!selectedService && !!checkIn && !!checkOut && nights > 0 && !!guestName.trim() && !hasConflict
 
-  const [waBlocked, setWaBlocked] = useState(false)
-  const [waUrl,     setWaUrl]     = useState('')
-
-  const handleRequest = () => {
+  const handleRequest = async () => {
     if (!canRequest || !selectedService) return
-    if (!guestName.trim()) return  // guard whitespace-only names
+    setSubmitting(true)
+    setSubmitError(null)
 
-    const shortBookingId = makeShortBookingId()
+    const result = await createBooking({
+      vendor_id:      vendor.id,
+      customer_name:  guestName.trim(),
+      customer_phone: guestPhone.trim(),
+      service_name:   selectedService.name,
+      service_price:  selectedService.price,
+      start_date:     checkIn,
+      end_date:       checkOut,
+      notes:          notes.trim(),
+      nights,
+      total_price:    total,
+    })
 
-    const lines = [
-      `*Booking Request — ${guestName.trim()}*`,
-      `🔖 Ref: ${shortBookingId}`,
-      guestPhone.trim() ? `📞 ${guestPhone.trim()}` : '',
-      '',
-      `🏡 *${selectedService.name}*`,
-      `📅 Check-in:  ${checkIn}`,
-      `📅 Check-out: ${checkOut}`,
-      `🌙 ${nights} night${nights !== 1 ? 's' : ''}`,
-      '',
-      `*Total: RM ${total.toFixed(2)}*`,
-      notes.trim() ? `📝 ${notes.trim()}` : '',
-    ].filter(Boolean).join('\n')
-
-    const url = `https://wa.me/${vendor.phone_number}?text=${encodeURIComponent(lines)}`
-    const opened = window.open(url, '_blank')
-
-    if (!opened) {
-      // Browser blocked the popup — show a fallback link instead
-      setWaUrl(url)
-      setWaBlocked(true)
+    if (!result.success) {
+      setSubmitError(result.error ?? 'Could not place your booking. Please try again.')
+      setSubmitting(false)
       return
     }
 
-    setSubmitted(true)
-    setDrawerOpen(false)
-
-    supabase.from('bookings').insert({
-      vendor_id:        vendor.id,
-      short_booking_id: shortBookingId,
-      customer_name:    guestName.trim(),
-      customer_phone:   guestPhone.trim(),
-      service_name:     selectedService.name,
-      start_date:       checkIn,
-      end_date:         checkOut,
-      notes:            notes.trim() || null,
-      status:           'pending',
-    }).then(({ error }) => {
-      if (error) console.error('Booking insert failed:', error.message)
-    })
+    // Redirect to the payment page
+    router.push('/booking/' + result.booking_token)
   }
 
   return (
@@ -308,8 +282,8 @@ export default function BookingClient({ vendor, categories, bookings = [] }: Pro
               hasConflict={hasConflict}
               unavailableDates={unavailableDates}
               onRequest={handleRequest}
-              submitted={submitted}
-              onReset={() => setSubmitted(false)}
+              submitting={submitting}
+              submitError={submitError}
             />
           </div>
         </div>
@@ -328,21 +302,16 @@ export default function BookingClient({ vendor, categories, bookings = [] }: Pro
         />
       )}
 
-      {/* ── WhatsApp popup-blocked fallback ───────────────── */}
-      {waBlocked && (
+      {/* ── Submission error banner ────────────────────────── */}
+      {submitError && (
         <div className="fixed inset-x-0 top-16 z-50 px-4">
-          <div className="bg-yellow-50 border border-yellow-200 rounded-2xl p-4 flex items-start gap-3 shadow-lg">
+          <div className="bg-red-50 border border-red-200 rounded-2xl p-4 flex items-start gap-3 shadow-lg">
             <span className="text-xl shrink-0">⚠️</span>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-ink">WhatsApp couldn't open automatically</p>
-              <p className="text-xs text-fog mt-0.5">Your browser blocked the popup. Tap the link below to send your request:</p>
-              <a href={waUrl} target="_blank" rel="noopener noreferrer"
-                onClick={() => { setWaBlocked(false); setSubmitted(true); setDrawerOpen(false) }}
-                className="inline-block mt-2 text-sm font-semibold text-[#25D366] underline underline-offset-2">
-                Open WhatsApp →
-              </a>
+              <p className="text-sm font-semibold text-ink">Could not place your booking</p>
+              <p className="text-xs text-fog mt-0.5">{submitError}</p>
             </div>
-            <button onClick={() => setWaBlocked(false)} className="text-fog hover:text-ink text-lg leading-none shrink-0">×</button>
+            <button onClick={() => setSubmitError(null)} className="text-fog hover:text-ink text-lg leading-none shrink-0">×</button>
           </div>
         </div>
       )}
@@ -366,14 +335,14 @@ export default function BookingClient({ vendor, categories, bookings = [] }: Pro
       {/* ── Mobile booking drawer ──────────────────────────── */}
       {drawerOpen && (
         <div className="lg:hidden">
-          <div className="fixed inset-0 z-40 bg-black/50" onClick={() => { setDrawerOpen(false); setSubmitted(false) }} />
+          <div className="fixed inset-0 z-40 bg-black/50" onClick={() => { setDrawerOpen(false) }} />
           <div className="fixed bottom-0 inset-x-0 z-50 bg-white rounded-t-3xl shadow-2xl max-h-[92vh] flex flex-col">
             <div className="flex justify-center pt-3 pb-1 shrink-0">
               <div className="w-10 h-1 rounded-full bg-border" />
             </div>
             <div className="flex items-center justify-between px-5 py-3 border-b border-border shrink-0">
               <h2 className="text-lg font-bold text-ink">Request to Book</h2>
-              <button onClick={() => { setDrawerOpen(false); setSubmitted(false) }}
+              <button onClick={() => { setDrawerOpen(false) }}
                 className="w-8 h-8 rounded-full bg-surface flex items-center justify-center text-fog hover:text-ink text-xl leading-none">×</button>
             </div>
             <div className="overflow-y-auto flex-1 px-5 py-5">
@@ -399,8 +368,8 @@ export default function BookingClient({ vendor, categories, bookings = [] }: Pro
                 hasConflict={hasConflict}
                 unavailableDates={unavailableDates}
                 onRequest={handleRequest}
-                submitted={submitted}
-                onReset={() => setSubmitted(false)}
+                submitting={submitting}
+                submitError={submitError}
               />
             </div>
           </div>
@@ -614,28 +583,17 @@ interface BookingWidgetProps {
   hasConflict: boolean
   unavailableDates: string[]
   onRequest: () => void
-  submitted: boolean
-  onReset: () => void
+  submitting: boolean
+  submitError: string | null
 }
 
 function BookingWidget({
   vendor, services, selectedService, onSelectService,
   checkIn, checkOut, onCheckIn, onCheckOut,
   guestName, onGuestName, guestPhone, onGuestPhone,
-  notes, onNotes, nights, total, today, canRequest, hasConflict, unavailableDates, onRequest, submitted, onReset,
+  notes, onNotes, nights, total, today, canRequest, hasConflict, unavailableDates, onRequest,
+  submitting, submitError,
 }: BookingWidgetProps) {
-  if (submitted) {
-    return (
-      <div className="border border-border rounded-2xl p-8 text-center space-y-3">
-        <p className="text-4xl">🎉</p>
-        <p className="font-bold text-ink text-lg">Request sent!</p>
-        <p className="text-sm text-fog">{vendor.name} will confirm your booking via WhatsApp shortly.</p>
-        <button onClick={onReset} className="text-sm font-semibold text-brand underline underline-offset-2 mt-2">
-          Make another request
-        </button>
-      </div>
-    )
-  }
 
   return (
     <div className="border border-border rounded-2xl overflow-hidden">
@@ -728,25 +686,19 @@ function BookingWidget({
           </div>
         </div>
 
-        {/* Payment methods */}
-        {vendor.payment_methods?.length > 0 && (
-          <div className="pt-1 space-y-2">
-            <p className="text-xs font-semibold text-ink">Payment</p>
-            <p className="text-xs text-fog">Pay after your booking is confirmed by the host.</p>
-          </div>
-        )}
-
         {/* CTA */}
+        {submitError && (
+          <p className="text-xs text-brand bg-red-50 border border-red-200 rounded-xl px-4 py-3">{submitError}</p>
+        )}
         <button
           onClick={onRequest}
-          disabled={!canRequest}
-          className="w-full bg-[#25D366] hover:bg-[#1ebe5d] disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-xl py-3.5 flex items-center justify-center gap-2 transition-colors"
+          disabled={!canRequest || submitting}
+          className="w-full bg-gradient-to-r from-brand-dark to-brand disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-xl py-3.5 flex items-center justify-center gap-2 transition-colors hover:opacity-90"
         >
-          <WhatsAppIcon />
-          Request to Book
+          {submitting ? 'Preparing your booking...' : 'Continue to Payment →'}
         </button>
 
-        <p className="text-center text-xs text-fog">You won't be charged yet — the host will confirm via WhatsApp.</p>
+        <p className="text-center text-xs text-fog">You will complete payment on the next page.</p>
       </div>
     </div>
   )

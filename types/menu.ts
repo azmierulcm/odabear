@@ -108,6 +108,7 @@ export type Booking = {
   booking_token: string
   payment_proof_url: string | null
   payment_submitted_at: string | null
+  total_price?: number
   created_at: string
   staff_log?: LogEntry[]
 }

@@ -2,6 +2,7 @@
 
 import { z } from 'zod'
 import { adminSupabase } from '@/lib/supabase/admin'
+import { notifyNewOrder } from '@/lib/email/vendor-alerts'
 
 // ─── Validation schema ────────────────────────────────────────
 
@@ -129,6 +130,16 @@ export async function checkoutToWhatsApp(
     .single()
 
   if (!error) {
+    await notifyNewOrder(payload.vendor_id, {
+      shortOrderId:    data.short_order_id as string,
+      customerName:    payload.customer_name.trim(),
+      customerPhone:   payload.customer_phone.trim() || null,
+      total:           derivedTotal,
+      items:           payload.items,
+      deliveryType:    payload.delivery_type,
+      deliveryAddress: payload.delivery_type === 'delivery' ? payload.delivery_address.trim() : null,
+      notes:           payload.notes.trim() || null,
+    })
     return {
       success:        true,
       short_order_id: data.short_order_id as string,
@@ -166,6 +177,16 @@ export async function checkoutToWhatsApp(
       return { success: false, error: 'We could not place your order right now. Please try again or message the vendor directly on WhatsApp.' }
     }
 
+    await notifyNewOrder(payload.vendor_id, {
+      shortOrderId:    short_order_id,
+      customerName:    payload.customer_name.trim(),
+      customerPhone:   payload.customer_phone.trim() || null,
+      total:           derivedTotal,
+      items:           payload.items,
+      deliveryType:    payload.delivery_type,
+      deliveryAddress: payload.delivery_type === 'delivery' ? payload.delivery_address.trim() : null,
+      notes:           payload.notes.trim() || null,
+    })
     return {
       success:        true,
       short_order_id,

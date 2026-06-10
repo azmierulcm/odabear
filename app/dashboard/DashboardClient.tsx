@@ -8,6 +8,7 @@ import { isDuitNowQr } from '@/lib/duitnowQr'
 import { decodeQrFromFile } from '@/lib/decodeQrImage'
 import { waUrl } from '@/lib/whatsapp'
 import { getReceiptSignedUrl } from './actions'
+import { getBookingReceiptSignedUrl } from '@/app/booking/[token]/actions'
 import type { Vendor, Category, Item, Order, OrderStatus, PaymentMethod, BusinessType, Booking, BookingStatus } from '@/types/menu'
 
 type Tab = 'profile' | 'rooms' | 'main' | 'activity' | 'settings'
@@ -1366,6 +1367,41 @@ function BookingsTab({ vendor, supabase }: {
   const [logInput, setLogInput]   = useState('')
   const [logSaving, setLogSaving] = useState(false)
 
+  // ── Payment receipt verification ─────────────────────────────
+  const [receiptBusy,  setReceiptBusy]  = useState<string | null>(null)
+  const [receiptError, setReceiptError] = useState<string | null>(null)
+
+  const viewBookingReceipt = async (bookingId: string) => {
+    setReceiptBusy(bookingId)
+    setReceiptError(null)
+    const res = await getBookingReceiptSignedUrl(bookingId)
+    setReceiptBusy(null)
+    if (res.url) window.open(res.url, '_blank', 'noopener,noreferrer')
+    else setReceiptError(bookingId)
+  }
+
+  // Confirming payment also clears the booking (moves to 'cleared' if pending/holding).
+  const confirmBookingPayment = async (bookingId: string) => {
+    const target = bookings.find((b) => b.id === bookingId)
+    const shouldClear = target && ['pending', 'holding'].includes(target.status)
+    setBookings((prev) => prev.map((b) => b.id === bookingId
+      ? { ...b, payment_status: 'confirmed', status: shouldClear ? 'cleared' : b.status }
+      : b))
+    setSelected((prev) => prev?.id === bookingId
+      ? { ...prev, payment_status: 'confirmed', status: shouldClear ? 'cleared' : prev.status }
+      : prev)
+    await supabase
+      .from('bookings')
+      .update({ payment_status: 'confirmed', ...(shouldClear ? { status: 'cleared' } : {}) })
+      .eq('id', bookingId)
+  }
+
+  const rejectBookingPayment = async (bookingId: string) => {
+    setBookings((prev) => prev.map((b) => b.id === bookingId ? { ...b, payment_status: 'rejected' } : b))
+    setSelected((prev) => prev?.id === bookingId ? { ...prev, payment_status: 'rejected' } : prev)
+    await supabase.from('bookings').update({ payment_status: 'rejected' }).eq('id', bookingId)
+  }
+
   useEffect(() => {
     const load = async () => {
       const { data } = await supabase.from('bookings').select('*')
@@ -1516,7 +1552,18 @@ function BookingsTab({ vendor, supabase }: {
                 <span>📅 {b.start_date}</span>
                 <span>→</span>
                 <span>{b.end_date}</span>
-                <span className="ml-auto text-[10px]">{timeAgo(b.created_at)}</span>
+                <div className="ml-auto flex items-center gap-2">
+                  {b.payment_status === 'submitted' && (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full">
+                      <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+                      Receipt
+                    </span>
+                  )}
+                  {b.payment_status === 'confirmed' && (
+                    <span className="text-[10px] font-semibold text-green-700">&#x1F4B0; Paid</span>
+                  )}
+                  <span className="text-[10px]">{timeAgo(b.created_at)}</span>
+                </div>
               </div>
             </button>
           ))}
@@ -1569,23 +1616,86 @@ function BookingsTab({ vendor, supabase }: {
                 {/* Payment ledger */}
                 <div className="border border-border rounded-xl overflow-hidden">
                   <div className="px-4 py-2 bg-surface border-b border-border">
-                    <p className="text-[10px] font-black text-fog uppercase tracking-widest">Payment Ledger</p>
+                    <p className="text-[10px] font-black text-fog uppercase tracking-widest">Payment</p>
                   </div>
                   <div className="divide-y divide-surface text-sm">
                     <div className="flex justify-between px-4 py-2.5">
-                      <span className="text-fog">Days</span>
+                      <span className="text-fog">Nights</span>
                       <span className="font-semibold text-ink">{daysOf(selected)}</span>
                     </div>
-                    <div className="flex justify-between px-4 py-2.5">
-                      <span className="text-fog">Payment status</span>
-                      <span className={`font-bold ${
-                        ['cleared','completed'].includes(stageOf(selected)) ? 'text-green-600' : 'text-yellow-600'
+                    {selected.total_price && (
+                      <div className="flex justify-between px-4 py-2.5">
+                        <span className="text-fog">Total</span>
+                        <span className="font-bold text-ink tabular-nums">RM {Number(selected.total_price).toFixed(2)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between items-center px-4 py-2.5">
+                      <span className="text-fog">Status</span>
+                      <span className={`text-xs font-bold px-2 py-1 rounded-full border ${
+                        selected.payment_status === 'confirmed' ? 'bg-green-50 text-green-700 border-green-200' :
+                        selected.payment_status === 'submitted' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                        selected.payment_status === 'rejected'  ? 'bg-red-50 text-brand border-red-200' :
+                        'bg-yellow-50 text-yellow-700 border-yellow-200'
                       }`}>
-                        {['cleared','completed'].includes(stageOf(selected)) ? '✓ Paid' : 'Awaiting payment'}
+                        {selected.payment_status === 'confirmed' ? '✓ Confirmed' :
+                         selected.payment_status === 'submitted' ? 'Receipt uploaded' :
+                         selected.payment_status === 'rejected'  ? 'Rejected' :
+                         'Awaiting payment'}
                       </span>
                     </div>
                   </div>
                 </div>
+
+                {/* Payment receipt review (QR payment flow) */}
+                {selected.payment_status === 'submitted' && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-3">
+                    <p className="text-xs font-bold text-blue-700">&#x1F4CB; Receipt uploaded — review and confirm</p>
+                    {receiptError === selected.id && (
+                      <p className="text-xs text-brand">Could not open receipt. Try again.</p>
+                    )}
+                    <button
+                      onClick={() => viewBookingReceipt(selected.id)}
+                      disabled={receiptBusy === selected.id}
+                      className="w-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl py-2.5 disabled:opacity-50 transition-colors"
+                    >
+                      {receiptBusy === selected.id ? 'Opening...' : '&#x1F4C4; View Receipt'}
+                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => confirmBookingPayment(selected.id)}
+                        className="flex-1 bg-green-500 hover:bg-green-600 text-white text-sm font-semibold rounded-xl py-2.5 transition-colors"
+                      >
+                        ✓ Confirm Payment
+                      </button>
+                      <button
+                        onClick={() => rejectBookingPayment(selected.id)}
+                        className="flex-1 border border-border text-fog text-sm font-semibold rounded-xl py-2.5 hover:border-brand hover:text-brand transition-colors"
+                      >
+                        ✗ Reject
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {selected.payment_status === 'confirmed' && selected.customer_phone && (
+                  <a
+                    href={waUrl(
+                      selected.customer_phone,
+                      `Hi ${selected.customer_name.split(' ')[0]}! Your payment for booking ${selected.short_booking_id ?? ''} has been confirmed. Check-in: ${selected.start_date}. We look forward to hosting you!`
+                    )}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full bg-[#25D366] hover:bg-[#1ebe5d] text-white text-sm font-semibold rounded-xl py-2.5 flex items-center justify-center gap-2 transition-colors"
+                  >
+                    &#128242; Notify guest — payment confirmed
+                  </a>
+                )}
+
+                {selected.payment_status === 'rejected' && (
+                  <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-xs text-brand">
+                    Payment rejected. The guest will be prompted to re-upload their receipt.
+                  </div>
+                )}
               </section>
 
               {/* ── Zone B: Guest Requests ──────────────────────── */}
