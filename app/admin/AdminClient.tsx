@@ -89,7 +89,7 @@ function CreateListingPanel({ onCreated }: { onCreated: (vendorId: string) => vo
               <input required value={slug}
                 onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))}
                 placeholder="tepi-pantai-chalet" className={inp} />
-              <p className="text-xs text-gray-400 mt-1">jomoda.com/{slug || '…'}</p>
+              <p className="text-xs text-gray-400 mt-1">odabear.com/{slug || '…'}</p>
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-600 mb-1">Business Type <span className="text-brand">*</span></label>

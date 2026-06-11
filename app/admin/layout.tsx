@@ -16,7 +16,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     <div className="min-h-screen bg-surface">
       <header className="bg-brand px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <span className="text-lg font-bold text-white">jomoda</span>
+          <span className="text-lg font-bold text-white">odabear</span>
           <span className="text-xs font-semibold border border-white/40 text-white px-2 py-0.5 rounded-full">
             Admin
           </span>

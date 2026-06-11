@@ -46,7 +46,7 @@ export default async function OrderStatusPage({ params }: { params: Promise<{ to
 
   const ref   = o.short_order_id
   const amount = total.toFixed(2)
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://jomoda.vercel.app'
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://odabear.com'
   const orderUrl = `${siteUrl}/order/${token}`
 
   // Rich "I've paid" message the customer sends to the vendor via WhatsApp.

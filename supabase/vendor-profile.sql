@@ -1,5 +1,5 @@
 -- ============================================================
--- Jomoda — Migration: Vendor Profile Fields + Gallery
+-- Odabear — Migration: Vendor Profile Fields + Gallery
 -- Run this in Supabase SQL Editor
 -- ============================================================
 

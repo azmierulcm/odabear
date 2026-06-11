@@ -36,7 +36,7 @@ export default async function AdminPage() {
   const billing  = await getPlatformBilling()
   // Degrade gracefully if the subscriptions migration hasn't been run yet.
   const payments = await listSubscriptionPayments().catch(() => [])
-  const fromEnv  = !!process.env.JOMODA_DUITNOW_PAYLOAD?.trim()
+  const fromEnv  = !!process.env.ODABEAR_DUITNOW_PAYLOAD?.trim()
 
   return (
     <div>

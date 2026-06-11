@@ -79,7 +79,7 @@ function AuthForm() {
 
         {/* Logo */}
         <Link href="/" className="text-xl font-bold text-brand tracking-tight shrink-0">
-          jomoda
+          odabear
         </Link>
 
         {/* Form area — vertically centered */}
@@ -238,7 +238,7 @@ function AuthForm() {
 
         {/* Bottom footer */}
         <p className="text-xs text-fog text-center shrink-0">
-          © {new Date().getFullYear()} Jomoda · Built for Malaysian sellers
+          © {new Date().getFullYear()} Odabear · Built for Malaysian sellers
         </p>
       </div>
 

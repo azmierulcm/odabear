@@ -95,7 +95,7 @@ export default async function BookingStatusPage({
 
   const ref    = b.short_booking_id ?? token.slice(0, 8).toUpperCase()
   const amount = total.toFixed(2)
-  const siteUrl    = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://jomoda.vercel.app'
+  const siteUrl    = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://odabear.com'
   const bookingUrl = `${siteUrl}/booking/${token}`
 
   // Rich "I have paid" message the customer sends to the vendor via WhatsApp.

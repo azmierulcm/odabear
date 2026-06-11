@@ -11,7 +11,7 @@ export default function HomePage() {
       {/* ── Nav ─────────────────────────────────────────────── */}
       <nav className="sticky top-0 z-50 bg-white/95 backdrop-blur border-b border-border">
         <div className="max-w-6xl mx-auto px-5 h-16 flex items-center justify-between">
-          <span className="text-xl font-bold text-brand tracking-tight">jomoda</span>
+          <span className="text-xl font-bold text-brand tracking-tight">odabear</span>
           <div className="flex items-center gap-3">
             <Link href="/login" className="text-sm font-semibold text-fog hover:text-ink transition-colors hidden sm:block">
               Sign in
@@ -84,7 +84,7 @@ export default function HomePage() {
               step: '02',
               icon: '🔗',
               title: 'Share Your Link',
-              desc: 'Drop your jomoda.com/yourname link in your Instagram bio, TikTok, or send it directly to customers.',
+              desc: 'Drop your odabear.com/yourname link in your Instagram bio, TikTok, or send it directly to customers.',
             },
             {
               step: '03',
@@ -276,14 +276,14 @@ export default function HomePage() {
       {/* ── Footer ───────────────────────────────────────────── */}
       <footer className="border-t border-border px-5 py-8">
         <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-          <span className="text-base font-bold text-brand">jomoda</span>
+          <span className="text-base font-bold text-brand">odabear</span>
           <div className="flex items-center gap-6 text-xs text-fog">
             <Link href="/login" className="hover:text-ink transition-colors">Login</Link>
-            <a href="mailto:hello@jomoda.com" className="hover:text-ink transition-colors">Contact</a>
+            <a href="mailto:holaodabear@gmail.com" className="hover:text-ink transition-colors">Contact</a>
             <Link href="/terms" className="hover:text-ink transition-colors">Terms</Link>
             <Link href="/privacy" className="hover:text-ink transition-colors">Privacy</Link>
           </div>
-          <p className="text-xs text-fog">© {new Date().getFullYear()} Jomoda. All rights reserved.</p>
+          <p className="text-xs text-fog">© {new Date().getFullYear()} Odabear. All rights reserved.</p>
         </div>
       </footer>
 

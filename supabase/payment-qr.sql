@@ -1,5 +1,5 @@
 -- ============================================================
--- Jomoda — Storage: payment-qr bucket
+-- Odabear — Storage: payment-qr bucket
 -- Create bucket manually in Supabase dashboard:
 --   Storage → New bucket → Name: payment-qr → Public: ON
 --

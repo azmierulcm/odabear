@@ -1,12 +1,12 @@
 import Link from 'next/link'
 
-export const metadata = { title: 'Privacy Policy — Jomoda' }
+export const metadata = { title: 'Privacy Policy — Odabear' }
 
 export default function PrivacyPage() {
   return (
     <div className="min-h-screen bg-white">
       <header className="border-b border-gray-100 px-6 py-4 flex items-center justify-between max-w-4xl mx-auto">
-        <Link href="/" className="font-bold text-xl text-gray-900 tracking-tight">Jomoda</Link>
+        <Link href="/" className="font-bold text-xl text-gray-900 tracking-tight">Odabear</Link>
         <Link href="/" className="text-sm text-gray-500 hover:text-gray-900 transition-colors">← Back to home</Link>
       </header>
 
@@ -19,12 +19,12 @@ export default function PrivacyPage() {
           <section>
             <h2 className="text-lg font-semibold text-gray-900 mb-3">1. Overview</h2>
             <p>
-              Jomoda ("we", "us", "our") is committed to protecting your personal data in accordance
+              Odabear ("we", "us", "our") is committed to protecting your personal data in accordance
               with the Personal Data Protection Act 2010 (PDPA) of Malaysia. This Privacy Policy
               explains what data we collect, how we use it, and your rights regarding that data.
             </p>
             <p className="mt-2">
-              This policy applies to vendors who register on Jomoda and to customers who interact
+              This policy applies to vendors who register on Odabear and to customers who interact
               with vendor pages hosted on our platform.
             </p>
           </section>
@@ -55,7 +55,7 @@ export default function PrivacyPage() {
           <section>
             <h2 className="text-lg font-semibold text-gray-900 mb-3">3. How We Use Your Data</h2>
             <ul className="list-disc pl-5 space-y-2">
-              <li>To provide and operate the Jomoda platform and your vendor dashboard.</li>
+              <li>To provide and operate the Odabear platform and your vendor dashboard.</li>
               <li>To display your public business page to customers.</li>
               <li>To transmit order and booking details to you via your dashboard and WhatsApp.</li>
               <li>To send transactional emails (account verification, password reset, subscription notices) via Resend.</li>
@@ -122,7 +122,7 @@ export default function PrivacyPage() {
             </ul>
             <p className="mt-2">
               While we take reasonable steps to protect your data, no system is completely secure.
-              Please use a strong, unique password for your Jomoda account.
+              Please use a strong, unique password for your Odabear account.
             </p>
           </section>
 
@@ -146,7 +146,7 @@ export default function PrivacyPage() {
             </ul>
             <p className="mt-3">
               To exercise any of these rights, email us at{' '}
-              <a href="mailto:hello@jomoda.com" className="text-red-600 underline">hello@jomoda.com</a>.
+              <a href="mailto:holaodabear@gmail.com" className="text-red-600 underline">holaodabear@gmail.com</a>.
               We will respond within 21 days.
             </p>
           </section>
@@ -154,7 +154,7 @@ export default function PrivacyPage() {
           <section>
             <h2 className="text-lg font-semibold text-gray-900 mb-3">8. Cookies</h2>
             <p>
-              Jomoda uses session cookies to keep you logged in to your dashboard. We do not use
+              Odabear uses session cookies to keep you logged in to your dashboard. We do not use
               tracking cookies or advertising cookies. No third-party analytics scripts are loaded
               on the platform.
             </p>
@@ -163,7 +163,7 @@ export default function PrivacyPage() {
           <section>
             <h2 className="text-lg font-semibold text-gray-900 mb-3">9. Children's Privacy</h2>
             <p>
-              Jomoda is not directed at children under the age of 18. We do not knowingly collect
+              Odabear is not directed at children under the age of 18. We do not knowingly collect
               personal data from minors. If you believe a minor has provided us with their data,
               please contact us and we will delete it promptly.
             </p>
@@ -183,7 +183,7 @@ export default function PrivacyPage() {
             <p>
               For any privacy-related questions, requests, or concerns, please contact our data
               protection contact at:{' '}
-              <a href="mailto:hello@jomoda.com" className="text-red-600 underline">hello@jomoda.com</a>
+              <a href="mailto:holaodabear@gmail.com" className="text-red-600 underline">holaodabear@gmail.com</a>
             </p>
           </section>
 
@@ -196,7 +196,7 @@ export default function PrivacyPage() {
           <Link href="/privacy" className="hover:text-gray-600 transition-colors font-medium text-gray-600">Privacy</Link>
           <Link href="/" className="hover:text-gray-600 transition-colors">Home</Link>
         </div>
-        <p className="mt-3">© {new Date().getFullYear()} Jomoda. All rights reserved.</p>
+        <p className="mt-3">© {new Date().getFullYear()} Odabear. All rights reserved.</p>
       </footer>
     </div>
   )

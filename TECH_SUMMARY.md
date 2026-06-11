@@ -1,4 +1,4 @@
-# Jomoda — Technical Summary
+# Odabear — Technical Summary
 *Last updated: May 2026*
 
 ---
@@ -205,7 +205,7 @@ File size limit: **5 MB** enforced client-side before upload.
 ### 1. Public Landing Page `/`
 ```
 ┌─────────────────────────────────────────────────────┐
-│  JOMODA                              [Login] [Start] │
+│  ODABEAR                              [Login] [Start] │
 ├─────────────────────────────────────────────────────┤
 │                                                      │
 │         Your shop. Your orders.                      │
@@ -215,7 +215,7 @@ File size limit: **5 MB** enforced client-side before upload.
 │                                                      │
 ├─────────────────────────────────────────────────────┤
 │  ┌──────────────────────────────────────────────┐   │
-│  │  Comparison slider: Jomoda vs other apps     │   │
+│  │  Comparison slider: Odabear vs other apps     │   │
 │  └──────────────────────────────────────────────┘   │
 ├─────────────────────────────────────────────────────┤
 │  3 Steps and 5 Minutes                               │

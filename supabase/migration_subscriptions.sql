@@ -4,7 +4,7 @@
 -- Safe to re-run (IF NOT EXISTS / idempotent upsert of the singleton row).
 -- ─────────────────────────────────────────────────────────────────────────
 
--- 1. Platform billing config — a single row (id = 1) holding Jomoda's own
+-- 1. Platform billing config — a single row (id = 1) holding Odabear's own
 --    DuitNow QR that every vendor pays into. The payload lets us render an
 --    amount-prefilled (dynamic) QR; qr_url is the original image fallback.
 create table if not exists public.platform_settings (

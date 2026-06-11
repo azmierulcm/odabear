@@ -3,7 +3,9 @@ import { adminSupabase } from '@/lib/supabase/admin'
 import { escapeHtml, wrapEmail } from './shell'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://jomoda.my'
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://odabear.com'
+// Replies go to the owner's inbox; the from-domain just needs Resend verification.
+const REPLY_TO = 'holaodabear@gmail.com'
 const DASHBOARD_URL = `${SITE_URL}/dashboard`
 
 interface VendorContact {
@@ -93,7 +95,8 @@ export async function notifyNewOrder(vendorId: string, info: {
     })
 
     const { error } = await resend.emails.send({
-      from: 'Jomoda <hello@jomoda.my>',
+      from: 'Odabear <hello@odabear.com>',
+      replyTo: REPLY_TO,
       to: contact.email,
       subject: `🔔 New order #${info.shortOrderId} — RM ${info.total.toFixed(2)}`,
       html,
@@ -170,7 +173,8 @@ export async function notifyNewBooking(vendorId: string, info: {
     })
 
     const { error } = await resend.emails.send({
-      from: 'Jomoda <hello@jomoda.my>',
+      from: 'Odabear <hello@odabear.com>',
+      replyTo: REPLY_TO,
       to: contact.email,
       subject: `🔔 New booking #${info.shortBookingId} — RM ${info.total.toFixed(2)}`,
       html,
@@ -216,7 +220,8 @@ export async function notifyReceiptUploaded(vendorId: string, info: {
     })
 
     const { error } = await resend.emails.send({
-      from: 'Jomoda <hello@jomoda.my>',
+      from: 'Odabear <hello@odabear.com>',
+      replyTo: REPLY_TO,
       to: contact.email,
       subject: `📋 Receipt uploaded — ${label} #${info.ref}`,
       html,
@@ -241,7 +246,7 @@ export async function notifyAccessExpired(info: {
     const bodyHtml = `
       <p style="margin:0 0 16px;font-size:16px;color:#222222;line-height:1.6;">Hi ${escapeHtml(info.vendorName)},</p>
       <p style="margin:0 0 16px;font-size:16px;color:#222222;line-height:1.6;">
-        Your ${what} for <strong>${escapeHtml(info.vendorName)}</strong> on Jomoda has ended.
+        Your ${what} for <strong>${escapeHtml(info.vendorName)}</strong> on Odabear has ended.
         Your store is now hidden and customers can no longer place orders.
       </p>
       <table width="100%" cellpadding="0" cellspacing="0" style="border:2px solid #FF385C;border-radius:12px;margin:24px 0 8px;">
@@ -269,9 +274,10 @@ export async function notifyAccessExpired(info: {
       ctaUrl: DASHBOARD_URL,
     })
     const { error } = await resend.emails.send({
-      from: 'Jomoda <hello@jomoda.my>',
+      from: 'Odabear <hello@odabear.com>',
+      replyTo: REPLY_TO,
       to: info.email,
-      subject: `Your Jomoda ${info.wasTrial ? 'trial' : 'subscription'} has ended — keep ${info.vendorName} live`,
+      subject: `Your Odabear ${info.wasTrial ? 'trial' : 'subscription'} has ended — keep ${info.vendorName} live`,
       html,
     })
     if (error) console.error('[notifyAccessExpired] Resend error:', error)
@@ -310,9 +316,10 @@ export async function notifyRenewalReminder(info: {
       ctaUrl: DASHBOARD_URL,
     })
     const { error } = await resend.emails.send({
-      from: 'Jomoda <hello@jomoda.my>',
+      from: 'Odabear <hello@odabear.com>',
+      replyTo: REPLY_TO,
       to: info.email,
-      subject: `⏳ ${info.vendorName}: ${dayWord} left on your Jomoda ${what}`,
+      subject: `⏳ ${info.vendorName}: ${dayWord} left on your Odabear ${what}`,
       html,
     })
     if (error) console.error('[notifyRenewalReminder] Resend error:', error)

@@ -21,7 +21,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
     <div className="min-h-screen bg-surface">
       {/* Top nav */}
       <header className="fixed top-0 inset-x-0 z-20 bg-white border-b border-border h-16 flex items-center px-6">
-        <a href="/" className="text-lg font-bold text-brand shrink-0">jomoda</a>
+        <a href="/" className="text-lg font-bold text-brand shrink-0">odabear</a>
 
         <div className="flex-1 flex justify-center">
           <p className="text-sm text-fog hidden sm:block truncate max-w-xs">{user.email}</p>

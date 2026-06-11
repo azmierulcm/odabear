@@ -8,7 +8,7 @@ import type { BazaarVendor } from './StallCard'
 export const revalidate = 3600
 
 export const metadata: Metadata = {
-  title: 'The Bazaar — Browse Local Shops | Jomoda',
+  title: 'The Bazaar — Browse Local Shops | Odabear',
   description: 'Discover local restaurants, retail shops, and homestays. Shop direct via WhatsApp with no commissions.',
 }
 

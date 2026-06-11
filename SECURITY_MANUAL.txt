@@ -1,12 +1,12 @@
 ================================================================================
-  JOMODA — SECURITY HARDENING TECHNICAL MANUAL
+  ODABEAR — SECURITY HARDENING TECHNICAL MANUAL
   Date: May 2026
   Prepared for: Engineering Team / Partner Reference
 ================================================================================
 
 OVERVIEW
 --------
-This document covers all security upgrades applied to the Jomoda platform
+This document covers all security upgrades applied to the Odabear platform
 across four priority levels (DEFCON 1 through 4). Each section describes
 the vulnerability that was found, why it was dangerous, what was changed,
 and which file(s) were affected.
@@ -301,9 +301,9 @@ FIX:
   Format: [admin] <action> <identifiers> by=<admin-email>
 
   Examples:
-    [admin] updateVendor vendor=abc-123 fields=is_active,name by=admin@jomoda.com
-    [admin] deleteItem id=xyz-456 by=admin@jomoda.com
-    [admin] addCategory vendor=abc-123 name="Drinks" by=admin@jomoda.com
+    [admin] updateVendor vendor=abc-123 fields=is_active,name by=admin@odabear.com
+    [admin] deleteItem id=xyz-456 by=admin@odabear.com
+    [admin] addCategory vendor=abc-123 name="Drinks" by=admin@odabear.com
 
   The verifyAdmin() helper was updated to return the admin's email address,
   which is then passed to each log line.
@@ -324,9 +324,9 @@ PROBLEM:
   to ${origin}${next} without validation. A crafted URL like:
     /auth/callback?code=valid&next=//evil.com
   produces:
-    https://jomoda.vercel.app//evil.com
+    https://odabear.com//evil.com
   Some browsers treat this as a redirect to evil.com (protocol-relative URL).
-  This could be used in phishing attacks — the user sees jomoda.vercel.app in
+  This could be used in phishing attacks — the user sees odabear.vercel.app in
   the email link but lands on a malicious site after clicking.
 
 FIX:

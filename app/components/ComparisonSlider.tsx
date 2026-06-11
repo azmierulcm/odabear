@@ -33,7 +33,7 @@ const comparisons = [
     right: {
       icon: '✨',
       title: 'The New Way',
-      badge: 'With Jomoda',
+      badge: 'With Odabear',
       badgeCls: 'text-green-700 bg-green-50',
       borderCls: 'border-green-100',
       content: (
@@ -97,7 +97,7 @@ const comparisons = [
     right: {
       icon: '🤑',
       title: 'Your Full Plate',
-      badge: 'With Jomoda',
+      badge: 'With Odabear',
       badgeCls: 'text-green-700 bg-green-50',
       borderCls: 'border-green-100',
       content: (
@@ -110,7 +110,7 @@ const comparisons = [
                 <span className="text-[10px] font-bold text-gray-800">RM 3,000</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-[10px] text-gray-400">📋 Jomoda flat fee</span>
+                <span className="text-[10px] text-gray-400">📋 Odabear flat fee</span>
                 <span className="text-[10px] font-bold text-gray-500">– RM 150</span>
               </div>
             </div>
@@ -221,8 +221,8 @@ const comparisons = [
     },
     right: {
       icon: '📊',
-      title: 'The Jomoda Dashboard',
-      badge: 'With Jomoda',
+      title: 'The Odabear Dashboard',
+      badge: 'With Odabear',
       badgeCls: 'text-green-700 bg-green-50',
       borderCls: 'border-green-100',
       content: (
@@ -284,7 +284,7 @@ const comparisons = [
     right: {
       icon: '🔥',
       title: 'The Pro Look',
-      badge: 'With Jomoda',
+      badge: 'With Odabear',
       badgeCls: 'text-green-700 bg-green-50',
       borderCls: 'border-green-100',
       content: (

@@ -202,7 +202,7 @@ export default function BazaarClient({ vendors }: Props) {
       <footer className="border-t border-border mt-12 py-8 text-center">
         <p className="text-sm text-fog">
           Want your shop listed?{' '}
-          <a href="/register" className="font-semibold text-brand underline underline-offset-2">Join Jomoda →</a>
+          <a href="/register" className="font-semibold text-brand underline underline-offset-2">Join Odabear →</a>
         </p>
       </footer>
     </div>

@@ -1,5 +1,5 @@
 -- ============================================================
--- Jomoda — Migration: Auth + RLS + Admin Stats View
+-- Odabear — Migration: Auth + RLS + Admin Stats View
 -- Run this in Supabase SQL Editor AFTER the initial schema.sql
 -- ============================================================
 

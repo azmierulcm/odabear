@@ -1,5 +1,5 @@
 -- ============================================================
--- Jomoda — Migration: Orders + Payment Methods
+-- Odabear — Migration: Orders + Payment Methods
 -- Run this in Supabase SQL Editor
 -- ============================================================
 

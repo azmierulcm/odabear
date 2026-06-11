@@ -138,7 +138,7 @@ export function buildReceipt(data: ReceiptData): Uint8Array {
   // ── Footer ──
   alignCenter()
   line('Thank you!')
-  line('Powered by Jomoda')
+  line('Powered by Odabear')
   alignLeft()
 
   // Feed and (optionally) cut.

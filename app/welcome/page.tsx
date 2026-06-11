@@ -31,7 +31,7 @@ export default function WelcomePage() {
       >
         <h1 className="text-3xl font-bold text-ink mb-3">You&apos;re in!</h1>
         <p className="text-fog text-base max-w-sm leading-relaxed mb-2">
-          Your email has been confirmed and your Jomoda account is now active.
+          Your email has been confirmed and your Odabear account is now active.
         </p>
         <p className="text-fog text-base max-w-sm leading-relaxed mb-10">
           Head to your dashboard to set up your shop and start taking orders.
@@ -54,7 +54,7 @@ export default function WelcomePage() {
       >
         <p className="text-xs text-fog">
           Powered by{' '}
-          <span className="font-semibold text-ink">Jomoda</span>
+          <span className="font-semibold text-ink">Odabear</span>
         </p>
       </div>
     </div>

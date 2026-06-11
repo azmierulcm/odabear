@@ -211,7 +211,7 @@ function BusinessTypeSetup({ onSelect }: { onSelect: (type: BusinessType) => voi
     <div className="min-h-[calc(100vh-4rem)] bg-surface flex flex-col items-center justify-center px-4 py-16">
       <div className="max-w-2xl w-full text-center mb-10">
         <p className="text-4xl mb-4">👋</p>
-        <h1 className="text-3xl font-bold text-ink mb-3">Welcome to Jomoda</h1>
+        <h1 className="text-3xl font-bold text-ink mb-3">Welcome to Odabear</h1>
         <p className="text-fog text-base">What type of business are you setting up?</p>
       </div>
 
@@ -402,7 +402,7 @@ function ProfileTab({ userId, vendor, businessType, onSaved, supabase }: {
               className={inputCls} />
           </Field>
 
-          <Field label="URL Slug" hint={<>{slugHint}: <span className="font-semibold text-ink">jomoda.com/{slug || 'your-slug'}</span></>} required>
+          <Field label="URL Slug" hint={<>{slugHint}: <span className="font-semibold text-ink">odabear.com/{slug || 'your-slug'}</span></>} required>
             <input type="text" required value={slug}
               onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))}
               placeholder="demo-kopitiam" className={inputCls} />

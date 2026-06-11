@@ -1,5 +1,5 @@
 -- ============================================================
--- Jomoda — Migration: Business Type + Bookings
+-- Odabear — Migration: Business Type + Bookings
 -- Run this in Supabase SQL Editor
 -- ============================================================
 

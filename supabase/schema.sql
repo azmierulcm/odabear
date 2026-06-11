@@ -1,5 +1,5 @@
 -- ============================================================
--- Jomoda — Digital Menu SaaS Schema
+-- Odabear — Digital Menu SaaS Schema
 -- Run this in Supabase SQL Editor to set up your database.
 -- ============================================================
 

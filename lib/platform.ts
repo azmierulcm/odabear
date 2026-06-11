@@ -6,15 +6,15 @@ export interface PlatformBilling {
   qrUrl: string | null     // original QR image (fallback if payload absent)
 }
 
-// Resolves Jomoda's own DuitNow billing details. Env vars win (so the payload
+// Resolves Odabear's own DuitNow billing details. Env vars win (so the payload
 // can be kept out of the DB if preferred); otherwise we read the singleton
 // platform_settings row that the admin populates by uploading the QR.
 export async function getPlatformBilling(): Promise<PlatformBilling> {
-  const envPayload = process.env.JOMODA_DUITNOW_PAYLOAD?.trim()
+  const envPayload = process.env.ODABEAR_DUITNOW_PAYLOAD?.trim()
   if (envPayload) {
     return {
       payload: envPayload,
-      name:    process.env.JOMODA_DUITNOW_NAME?.trim() || 'Jomoda',
+      name:    process.env.ODABEAR_DUITNOW_NAME?.trim() || 'Odabear',
       qrUrl:   null,
     }
   }
@@ -27,7 +27,7 @@ export async function getPlatformBilling(): Promise<PlatformBilling> {
 
   return {
     payload: data?.duitnow_payload ?? null,
-    name:    data?.duitnow_name ?? 'Jomoda',
+    name:    data?.duitnow_name ?? 'Odabear',
     qrUrl:   data?.qr_url ?? null,
   }
 }

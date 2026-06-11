@@ -6,7 +6,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 ---
 
-# Jomoda Product Vision
+# Odabear Product Vision
 
 **Goal:** Be the #1 web-based mobile platform for e-commerce and service businesses in Malaysia.
 

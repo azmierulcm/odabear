@@ -146,7 +146,7 @@ function ProfileEditor({ vendor, onSaved }: { vendor: Vendor; onSaved: (v: Vendo
           <Field label="Business Name" required>
             <input type="text" required value={name} onChange={(e) => setName(e.target.value)} className={inputCls} />
           </Field>
-          <Field label="URL Slug" hint={<>Public link: <span className="font-semibold text-ink">jomoda.com/{slug}</span></>} required>
+          <Field label="URL Slug" hint={<>Public link: <span className="font-semibold text-ink">odabear.com/{slug}</span></>} required>
             <input type="text" required value={slug}
               onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))}
               className={inputCls} />

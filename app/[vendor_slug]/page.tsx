@@ -5,7 +5,7 @@ import { getStorefront } from '@/lib/storefront'
 import MenuClient from './MenuClient'
 import BookingClient from './BookingClient'
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://jomoda.vercel.app'
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://odabear.com'
 
 // Link-preview tags so a vendor's storefront looks rich when shared on
 // WhatsApp (rule #4 — WhatsApp is the primary sharing channel), Telegram, etc.
@@ -19,7 +19,7 @@ export async function generateMetadata({
   const vendor = store?.vendor
 
   if (!vendor) {
-    return { title: 'Shop not found · Jomoda' }
+    return { title: 'Shop not found · Odabear' }
   }
 
   const typeLabel =
@@ -53,7 +53,7 @@ export async function generateMetadata({
       title,
       description,
       url,
-      siteName: 'Jomoda',
+      siteName: 'Odabear',
       ...(images ? { images } : {}),
     },
     twitter: {

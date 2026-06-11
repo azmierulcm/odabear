@@ -1,5 +1,5 @@
 -- ============================================================
--- Jomoda — Storage: item-images bucket
+-- Odabear — Storage: item-images bucket
 -- Create bucket manually in Supabase dashboard:
 --   Storage → New bucket → Name: item-images → Public: ON
 --

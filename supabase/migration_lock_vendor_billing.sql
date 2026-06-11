@@ -42,7 +42,7 @@ begin
      or new.trial_ends_at    is distinct from old.trial_ends_at
      or new.is_active        is distinct from old.is_active
      or new.is_featured      is distinct from old.is_featured then
-    raise exception 'These fields are managed by Jomoda. Please contact support.';
+    raise exception 'These fields are managed by Odabear. Please contact support.';
   end if;
 
   return new;

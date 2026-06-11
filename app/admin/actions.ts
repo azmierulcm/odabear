@@ -96,7 +96,7 @@ export async function savePlatformBilling(input: {
     .upsert({
       id:              1,
       duitnow_payload: input.payload,
-      duitnow_name:    input.name.trim() || 'Jomoda',
+      duitnow_name:    input.name.trim() || 'Odabear',
       qr_url:          input.qrUrl,
       updated_at:      new Date().toISOString(),
     })

@@ -47,7 +47,7 @@ export default function ResetPasswordPage() {
 
         {/* Logo */}
         <Link href="/" className="block text-xl font-bold text-brand tracking-tight mb-8 text-center">
-          jomoda
+          odabear
         </Link>
 
         <div className="bg-white rounded-2xl border border-border p-8 shadow-sm space-y-6">

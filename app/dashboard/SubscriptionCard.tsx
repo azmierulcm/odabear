@@ -76,7 +76,7 @@ export default function SubscriptionCard({ vendor, billing, onActivated }: Props
     if (!qr) return
     const a = document.createElement('a')
     a.href = qr
-    a.download = 'jomoda-subscription-qr.png'
+    a.download = 'odabear-subscription-qr.png'
     document.body.appendChild(a); a.click(); a.remove()
   }
 
@@ -142,7 +142,7 @@ export default function SubscriptionCard({ vendor, billing, onActivated }: Props
         <div className="border border-border rounded-xl p-4 space-y-4">
           {!billing.payload && !billing.qrUrl ? (
             <p className="text-sm text-fog">
-              Online payment isn&apos;t set up yet. Please contact Jomoda support to renew.
+              Online payment isn&apos;t set up yet. Please contact Odabear support to renew.
             </p>
           ) : (
             <>

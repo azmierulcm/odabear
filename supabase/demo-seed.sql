@@ -1,5 +1,5 @@
 -- ============================================================
--- Jomoda — Demo Showroom Seed
+-- Odabear — Demo Showroom Seed
 -- Three premium vendors covering all three business_type values.
 -- Run this in Supabase SQL Editor.
 -- ============================================================

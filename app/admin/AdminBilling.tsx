@@ -94,7 +94,7 @@ export default function AdminBilling({ initialBilling, initialPayments }: Props)
       <section className="bg-white rounded-2xl border border-gray-200 p-6">
         <h2 className="text-lg font-bold text-gray-900">Subscription billing QR</h2>
         <p className="text-sm text-gray-500 mt-1">
-          Jomoda&apos;s own DuitNow that vendors pay RM150/month into.
+          Odabear&apos;s own DuitNow that vendors pay RM150/month into.
           {initialBilling.fromEnv && ' (Currently set via environment variable — uploading here is ignored unless you remove it.)'}
         </p>
 
