@@ -65,6 +65,48 @@ export async function generateMetadata({
   }
 }
 
+// Structured data (schema.org) so Google can show rich results for stores.
+// Typed by business: Restaurant / Store / LodgingBusiness.
+function buildJsonLd(vendor: {
+  name: string
+  slug: string
+  description: string | null
+  business_type: string | null
+  phone_number: string
+  logo_url: string | null
+  gallery_urls: string[]
+  location_address: string | null
+  location_lat: number | null
+  location_lng: number | null
+}): string {
+  const type =
+    vendor.business_type === 'booking' ? 'LodgingBusiness'
+    : vendor.business_type === 'retail' ? 'Store'
+    : 'Restaurant'
+
+  const images = [...(vendor.gallery_urls ?? []), vendor.logo_url].filter(Boolean)
+
+  const jsonLd: Record<string, unknown> = {
+    '@context': 'https://schema.org',
+    '@type': type,
+    name: vendor.name,
+    url: `${SITE_URL}/${vendor.slug}`,
+    ...(vendor.description?.trim() ? { description: vendor.description.trim() } : {}),
+    ...(images.length ? { image: images } : {}),
+    ...(vendor.phone_number ? { telephone: `+${vendor.phone_number}` } : {}),
+    ...(vendor.location_address ? {
+      address: { '@type': 'PostalAddress', streetAddress: vendor.location_address, addressCountry: 'MY' },
+    } : {}),
+    ...(vendor.location_lat != null && vendor.location_lng != null ? {
+      geo: { '@type': 'GeoCoordinates', latitude: vendor.location_lat, longitude: vendor.location_lng },
+    } : {}),
+    priceRange: 'RM',
+  }
+
+  // Escape < so user-supplied text can't close the script tag.
+  return JSON.stringify(jsonLd).replace(/</g, '\\u003c')
+}
+
 export default async function VendorMenuPage({
   params,
 }: {
@@ -78,6 +120,13 @@ export default async function VendorMenuPage({
 
   if (!vendor.business_type) notFound()
 
+  const jsonLd = (
+    <script
+      type="application/ld+json"
+      dangerouslySetInnerHTML={{ __html: buildJsonLd(vendor) }}
+    />
+  )
+
   if (vendor.business_type === 'booking') {
     const todayStr = new Date().toISOString().split('T')[0]
 
@@ -90,12 +139,22 @@ export default async function VendorMenuPage({
       .neq('status', 'cancelled')
       .gte('end_date', todayStr)
 
-    return <BookingClient
-      vendor={vendor}
-      categories={categories}
-      bookings={bookingData ?? []}
-    />
+    return (
+      <>
+        {jsonLd}
+        <BookingClient
+          vendor={vendor}
+          categories={categories}
+          bookings={bookingData ?? []}
+        />
+      </>
+    )
   }
 
-  return <MenuClient vendor={vendor} categories={categories} />
+  return (
+    <>
+      {jsonLd}
+      <MenuClient vendor={vendor} categories={categories} />
+    </>
+  )
 }

@@ -4,9 +4,24 @@ import './globals.css'
 
 const geist = Geist({ subsets: ['latin'], variable: '--font-geist' })
 
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.odabear.com'
+
+const SITE_TITLE = 'Odabear — Sell on WhatsApp with your own mobile storefront'
+const SITE_DESC =
+  'Menus, orders and bookings for Malaysian businesses — straight to your WhatsApp. ' +
+  'Your own storefront link, 0% commission, RM150/month.'
+
 export const metadata: Metadata = {
-  title: 'Odabear',
-  description: 'Digital menus for F&B businesses',
+  metadataBase: new URL(SITE_URL),
+  title: SITE_TITLE,
+  description: SITE_DESC,
+  openGraph: {
+    type: 'website',
+    siteName: 'Odabear',
+    title: SITE_TITLE,
+    description: SITE_DESC,
+    url: SITE_URL,
+  },
 }
 
 // width=device-width + initialScale=1 stops Android Chrome from rendering
