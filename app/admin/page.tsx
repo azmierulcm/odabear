@@ -1,5 +1,8 @@
 import { adminSupabase } from '@/lib/supabase/admin'
+import { getPlatformBilling } from '@/lib/platform'
 import AdminClient from './AdminClient'
+import AdminBilling from './AdminBilling'
+import { listSubscriptionPayments } from './actions'
 
 export type VendorStat = {
   id: string
@@ -30,6 +33,11 @@ export default async function AdminPage() {
     )
   }
 
+  const billing  = await getPlatformBilling()
+  // Degrade gracefully if the subscriptions migration hasn't been run yet.
+  const payments = await listSubscriptionPayments().catch(() => [])
+  const fromEnv  = !!process.env.JOMODA_DUITNOW_PAYLOAD?.trim()
+
   return (
     <div>
       <div className="mb-6">
@@ -37,6 +45,7 @@ export default async function AdminPage() {
         <p className="text-sm text-gray-500 mt-1">{data?.length ?? 0} registered vendors</p>
       </div>
       <AdminClient vendors={(data ?? []) as VendorStat[]} />
+      <AdminBilling initialBilling={{ ...billing, fromEnv }} initialPayments={payments} />
     </div>
   )
 }

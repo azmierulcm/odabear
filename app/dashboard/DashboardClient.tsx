@@ -11,18 +11,26 @@ import { getReceiptSignedUrl } from './actions'
 import { getBookingReceiptSignedUrl } from '@/app/booking/[token]/actions'
 import { buildReceipt } from '@/lib/escpos'
 import { isBluetoothPrintingSupported, isConnected, connectPrinter, printBytes, type PrinterConnection } from '@/lib/btPrinter'
+import SubscriptionCard from './SubscriptionCard'
 import type { Vendor, Category, Item, Order, OrderStatus, OrderLineItem, PaymentMethod, PaymentStatus, BusinessType, Booking, BookingStatus } from '@/types/menu'
 
 type Tab = 'profile' | 'rooms' | 'main' | 'activity' | 'analytics' | 'settings'
+
+interface PlatformBilling {
+  payload: string | null
+  name: string
+  qrUrl: string | null
+}
 
 interface Props {
   userId: string
   vendor: Vendor | null
   initialCategories: Category[]
   initialItems: Item[]
+  billing: PlatformBilling
 }
 
-export default function DashboardClient({ userId, vendor: initialVendor, initialCategories, initialItems }: Props) {
+export default function DashboardClient({ userId, vendor: initialVendor, initialCategories, initialItems, billing }: Props) {
   const [vendor, setVendor]         = useState<Vendor | null>(initialVendor)
   const [businessType, setBusinessType] = useState<BusinessType | null>(initialVendor?.business_type ?? null)
   const [tab, setTab]               = useState<Tab>('profile')
@@ -137,7 +145,7 @@ export default function DashboardClient({ userId, vendor: initialVendor, initial
       {tab === 'analytics' && !vendor && <SetupPrompt onGoToProfile={() => setTab('profile')} />}
 
       {tab === 'settings' && vendor && (
-        <SettingsTab userId={userId} vendor={vendor} onSaved={(v) => setVendor(v)} supabase={supabase} />
+        <SettingsTab userId={userId} vendor={vendor} billing={billing} onSaved={(v) => setVendor(v)} onPatchVendor={(patch) => setVendor((prev) => prev ? { ...prev, ...patch } : prev)} supabase={supabase} />
       )}
       {tab === 'settings' && !vendor && <SetupPrompt onGoToProfile={() => setTab('profile')} />}
 
@@ -2561,10 +2569,12 @@ const emptyDraft = (type: PMDraft['type']): PMDraft => {
   return { type, recipient_name: '', id: '' }
 }
 
-function SettingsTab({ userId, vendor, onSaved, supabase }: {
+function SettingsTab({ userId, vendor, billing, onSaved, onPatchVendor, supabase }: {
   userId: string
   vendor: Vendor
+  billing: { payload: string | null; name: string; qrUrl: string | null }
   onSaved: (v: Vendor) => void
+  onPatchVendor: (patch: Partial<Vendor>) => void
   supabase: ReturnType<typeof createClient>
 }) {
   const [phone, setPhone]     = useState(vendor.phone_number)
@@ -2619,6 +2629,8 @@ function SettingsTab({ userId, vendor, onSaved, supabase }: {
   }
 
   return (
+    <div className="space-y-6">
+    <SubscriptionCard vendor={vendor} billing={billing} onActivated={onPatchVendor} />
     <form
       onSubmit={handleSave}
       onKeyDown={(e) => {
@@ -2704,6 +2716,7 @@ function SettingsTab({ userId, vendor, onSaved, supabase }: {
 
       <button type="submit" disabled={saving} className={btnPrimary}>{saving ? 'Saving…' : 'Save settings'}</button>
     </form>
+    </div>
   )
 }
 

@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { getPlatformBilling } from '@/lib/platform'
 import type { Vendor, Category, Item } from '@/types/menu'
 import DashboardClient from './DashboardClient'
 
@@ -17,6 +18,8 @@ export default async function DashboardPage() {
     .select('*')
     .eq('user_id', user.id)
     .maybeSingle()
+
+  const billing = await getPlatformBilling()
 
   let categories: Category[] = []
   let items: Item[] = []
@@ -50,6 +53,7 @@ export default async function DashboardPage() {
       vendor={vendor as Vendor | null}
       initialCategories={categories}
       initialItems={items}
+      billing={billing}
     />
   )
 }

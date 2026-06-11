@@ -15,11 +15,11 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  // ── Find expired trials ───────────────────────────────────
+  // ── Find lapsed access (free trials AND paid subs past their date) ──
   const { data: expired, error: fetchError } = await adminSupabase
     .from('vendors')
     .select('id, name, slug, user_id')
-    .eq('subscription_status', 'trial')
+    .in('subscription_status', ['trial', 'active'])
     .lt('trial_ends_at', new Date().toISOString())
 
   if (fetchError) {

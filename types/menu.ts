@@ -25,6 +25,8 @@ export type Vendor = {
   location_lat: number | null
   location_lng: number | null
   makanjom_restaurant_id: string | null
+  subscription_status?: 'trial' | 'active' | 'expired' | null
+  trial_ends_at?: string | null
 }
 
 export type Category = {
