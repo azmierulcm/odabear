@@ -12,7 +12,6 @@
     "@supabase/ssr": "^0.10.3",
     "@supabase/supabase-js": "^2.105.4",
     "@types/qrcode": "^1.5.5",
-    "framer-motion": "^12.38.0",
     "jsqr": "^1.4.0",
     "next": "16.2.6",
     "qrcode": "^1.5.4",

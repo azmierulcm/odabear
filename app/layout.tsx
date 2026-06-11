@@ -17,9 +17,23 @@ export const viewport: Viewport = {
   initialScale: 1,
 }
 
+// Supabase storage origin — preconnecting shaves the DNS + TLS handshake off
+// the first image fetch (vendor logos, hero galleries) on the storefront LCP.
+const SUPABASE_ORIGIN = (() => {
+  try { return new URL(process.env.NEXT_PUBLIC_SUPABASE_URL ?? '').origin } catch { return null }
+})()
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={geist.variable}>
+      <head>
+        {SUPABASE_ORIGIN && (
+          <>
+            <link rel="preconnect" href={SUPABASE_ORIGIN} crossOrigin="anonymous" />
+            <link rel="dns-prefetch" href={SUPABASE_ORIGIN} />
+          </>
+        )}
+      </head>
       <body className="antialiased bg-gray-50 text-gray-900">{children}</body>
     </html>
   )

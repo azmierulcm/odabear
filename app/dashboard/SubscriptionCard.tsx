@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import QRCode from 'qrcode'
 import { toDynamicPayload } from '@/lib/duitnowQr'
 import { compressImage } from '@/lib/compressImage'
 import { SUBSCRIPTION_PRICE, daysLeft, fmtDate, type SubStatus } from '@/lib/subscription'
@@ -38,6 +37,8 @@ export default function SubscriptionCard({ vendor, billing, onActivated }: Props
           amount:    SUBSCRIPTION_PRICE,
           reference: `SUB${vendor.id.slice(0, 6).toUpperCase()}`,
         })
+        // Loaded on demand so qrcode (~50 KB) isn't in the dashboard's first bundle.
+        const { default: QRCode } = await import('qrcode')
         const url = await QRCode.toDataURL(payload, { errorCorrectionLevel: 'M', width: 480, margin: 1 })
         if (!cancelled) setQr(url)
       } catch {

@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
 
 const WORDS = ['menu', 'catalog', 'booking', 'storefront', 'reservation']
 const INTERVAL = 1500
@@ -52,28 +51,19 @@ export default function AnimatedHeadline() {
       {/* Line 1: "Stop giving away" */}
       <span className="block">Stop giving away</span>
 
-      {/* Line 2: dynamic word */}
+      {/* Line 2: dynamic word — key change remounts the span, replaying the CSS enter animation */}
       <span className="inline-flex items-center relative h-[1.15em]">
-        <AnimatePresence mode="wait" initial={false}>
-          <motion.span
-            key={index}
-            initial={{ opacity: 0, y: 28 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -28 }}
-            transition={{ duration: FADE_DURATION, ease: 'easeInOut' }}
-            className="relative inline-block"
-          >
-            {WORDS[index]}
+        <span key={index} className="relative inline-block animate-wordIn">
+          {WORDS[index]}
 
-            {/* Strikethrough line */}
-            {phase !== 'idle' && (
-              <span
-                className="absolute left-0 top-[60%] -translate-y-1/2 h-[5px] bg-ink rounded-full pointer-events-none"
-                style={{ width: `${strikeWidth}%` }}
-              />
-            )}
-          </motion.span>
-        </AnimatePresence>
+          {/* Strikethrough line */}
+          {phase !== 'idle' && (
+            <span
+              className="absolute left-0 top-[60%] -translate-y-1/2 h-[5px] bg-ink rounded-full pointer-events-none"
+              style={{ width: `${strikeWidth}%` }}
+            />
+          )}
+        </span>
       </span>
 
       {/* Line 3: accent */}

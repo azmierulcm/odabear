@@ -3,9 +3,12 @@
 // Used at upload time so we can capture the vendor's DuitNow payload and later
 // inject the order amount into it (see lib/duitnowQr.ts). Returns the decoded
 // string, or null if no QR could be read from the image.
-import jsQR from 'jsqr'
+//
+// jsQR (~30 KB) is dynamically imported so it loads only on the first decode
+// (a QR upload) instead of being bundled into every page that imports this.
 
 export async function decodeQrFromFile(file: File): Promise<string | null> {
+  const { default: jsQR } = await import('jsqr')
   const bitmap = await createImageBitmap(file)
   try {
     const canvas = document.createElement('canvas')
