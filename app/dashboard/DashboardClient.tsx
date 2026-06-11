@@ -1004,7 +1004,10 @@ function AvailabilityTab({ vendor, onVendorUpdate, supabase, items, onItemUpdate
 
   useEffect(() => {
     const load = async () => {
-      const { data } = await supabase.from('bookings').select('*').eq('vendor_id', vendor.id).order('start_date')
+      // Only current/future bookings can block availability — past ones are irrelevant.
+      const todayStr = new Date().toISOString().split('T')[0]
+      const { data } = await supabase.from('bookings').select('*').eq('vendor_id', vendor.id)
+        .gte('end_date', todayStr).order('start_date')
       setBookings((data ?? []) as Booking[])
     }
     load()
@@ -1423,6 +1426,7 @@ function BookingsTab({ vendor, supabase }: {
     const load = async () => {
       const { data } = await supabase.from('bookings').select('*')
         .eq('vendor_id', vendor.id).order('created_at', { ascending: false })
+        .limit(DASHBOARD_FETCH_LIMIT)
       setBookings((data ?? []) as Booking[])
       setLoading(false)
     }
@@ -1847,6 +1851,12 @@ function timeAgo(dateStr: string) {
 
 const ORDERS_PER_PAGE = 10
 
+// Cap how many rows the dashboard pulls into the browser at once. Vendors very
+// rarely scroll past the most recent few hundred; this bounds memory/transfer
+// instead of loading an unbounded history on every visit.
+const DASHBOARD_FETCH_LIMIT = 300   // order/booking lists (paginated client-side)
+const ANALYTICS_FETCH_LIMIT = 2000  // sales aggregate window
+
 // Stable refs for useSyncExternalStore (Bluetooth support is a one-shot read —
 // it never changes during a session, so the subscribe is a no-op).
 const btNoopSubscribe = () => () => {}
@@ -1894,6 +1904,8 @@ function AnalyticsTab({ vendor, businessType, supabase }: {
           .from('bookings')
           .select('id, total_price, payment_status, created_at, service_name')
           .eq('vendor_id', vendor.id)
+          .order('created_at', { ascending: false })
+          .limit(ANALYTICS_FETCH_LIMIT)
         const rows = (data ?? []) as Booking[]
         setRecords(rows.map((b) => {
           const total = Number(b.total_price ?? 0)
@@ -1910,6 +1922,8 @@ function AnalyticsTab({ vendor, businessType, supabase }: {
           .from('orders')
           .select('id, total_price, payment_status, created_at, items, cart_items')
           .eq('vendor_id', vendor.id)
+          .order('created_at', { ascending: false })
+          .limit(ANALYTICS_FETCH_LIMIT)
         const rows = (data ?? []) as Order[]
         setRecords(rows.map((o) => {
           const lineItems = ((o.items?.length ? o.items : o.cart_items) ?? []) as OrderLineItem[]
@@ -2083,6 +2097,7 @@ function OrdersTab({ vendor, supabase }: {
         .select('*')
         .eq('vendor_id', vendor.id)
         .order('created_at', { ascending: false })
+        .limit(DASHBOARD_FETCH_LIMIT)
       setOrders((data ?? []) as Order[])
       setLoading(false)
     }

@@ -1,24 +1,11 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
-import { cache } from 'react'
-import { createClient } from '@/lib/supabase/server'
-import type { Vendor, CategoryWithItems, Item } from '@/types/menu'
+import { adminSupabase } from '@/lib/supabase/admin'
+import { getStorefront } from '@/lib/storefront'
 import MenuClient from './MenuClient'
 import BookingClient from './BookingClient'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://jomoda.vercel.app'
-
-// Cached for the duration of a single request so generateMetadata and the page
-// component share one DB read of the vendor instead of querying it twice.
-const getVendor = cache(async (slug: string): Promise<Vendor | null> => {
-  const supabase = await createClient()
-  const { data } = await supabase
-    .from('vendors')
-    .select('*')
-    .eq('slug', slug)
-    .single()
-  return (data as Vendor) ?? null
-})
 
 // Link-preview tags so a vendor's storefront looks rich when shared on
 // WhatsApp (rule #4 — WhatsApp is the primary sharing channel), Telegram, etc.
@@ -28,7 +15,8 @@ export async function generateMetadata({
   params: Promise<{ vendor_slug: string }>
 }): Promise<Metadata> {
   const { vendor_slug } = await params
-  const vendor = await getVendor(vendor_slug)
+  const store = await getStorefront(vendor_slug)
+  const vendor = store?.vendor
 
   if (!vendor) {
     return { title: 'Shop not found · Jomoda' }
@@ -83,33 +71,19 @@ export default async function VendorMenuPage({
   params: Promise<{ vendor_slug: string }>
 }) {
   const { vendor_slug } = await params
-  const vendor = await getVendor(vendor_slug)
+  const store = await getStorefront(vendor_slug)
 
-  if (!vendor) notFound()
-
-  const supabase = await createClient()
-  const { data: rawCategories } = await supabase
-    .from('categories')
-    .select('*, items(*)')
-    .eq('vendor_id', vendor.id)
-    .order('sort_order', { ascending: true })
-
-  const categories: CategoryWithItems[] = (rawCategories ?? []).map((cat) => ({
-    id: cat.id,
-    vendor_id: cat.vendor_id,
-    name: cat.name,
-    sort_order: cat.sort_order,
-    items: ((cat.items ?? []) as Item[]).sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0)),
-  }))
+  if (!store) notFound()
+  const { vendor, categories } = store
 
   if (!vendor.business_type) notFound()
 
   if (vendor.business_type === 'booking') {
     const todayStr = new Date().toISOString().split('T')[0]
 
-    // Fetch non-cancelled bookings WITH service_name so the client can
-    // filter availability per room — Room A booked ≠ Room B blocked.
-    const { data: bookingData } = await supabase
+    // Availability must be live, so bookings are fetched fresh (uncached) via
+    // the service role — only the menu above comes from the Data Cache.
+    const { data: bookingData } = await adminSupabase
       .from('bookings')
       .select('start_date, end_date, service_name')
       .eq('vendor_id', vendor.id)

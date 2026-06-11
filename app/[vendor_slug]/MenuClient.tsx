@@ -171,7 +171,7 @@ export default function MenuClient({ vendor, categories }: Props) {
       {/* ── Mobile sticky header ────────────────────────────── */}
       <header className="lg:hidden sticky top-0 z-30 bg-white border-b border-border h-14 flex items-center px-4 gap-3">
         {vendor.logo_url
-          ? <img src={vendor.logo_url} alt={vendor.name} className="w-8 h-8 rounded-full object-cover border border-border shrink-0" />
+          ? <Image src={vendor.logo_url} alt={vendor.name} width={32} height={32} className="w-8 h-8 rounded-full object-cover border border-border shrink-0" />
           : <div className="w-8 h-8 rounded-full bg-brand flex items-center justify-center text-white font-bold text-xs shrink-0">{(vendor.name?.[0] ?? '?').toUpperCase()}</div>
         }
         <p className="font-bold text-ink text-sm flex-1 truncate">{vendor.name}</p>
@@ -187,7 +187,7 @@ export default function MenuClient({ vendor, categories }: Props) {
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             {vendor.logo_url && (
-              <img src={vendor.logo_url} alt={vendor.name} className="w-16 h-16 rounded-full object-cover border border-border shrink-0" />
+              <Image src={vendor.logo_url} alt={vendor.name} width={64} height={64} className="w-16 h-16 rounded-full object-cover border border-border shrink-0" />
             )}
             <div>
               <h1 className="text-3xl font-bold text-ink">{vendor.name}</h1>
@@ -477,7 +477,7 @@ function HeroGrid({ gallery, vendorName }: { gallery: string[]; vendorName: stri
               visibility:    i === activeIdx ? 'visible' : 'hidden',
               pointerEvents: i === activeIdx ? 'auto'    : 'none',
             }}>
-            <img src={url} alt="" className="w-full h-full object-cover select-none" draggable={false} />
+            <Image src={url} alt="" fill sizes="100vw" priority={i === 0} className="object-cover select-none" draggable={false} />
           </div>
         ))}
         {images.length > 1 && (
@@ -492,18 +492,18 @@ function HeroGrid({ gallery, vendorName }: { gallery: string[]; vendorName: stri
 
       <div className="hidden lg:block max-w-7xl mx-auto px-8 mb-8">
         <div className="rounded-2xl overflow-hidden h-[460px] flex gap-2">
-          <div className={`overflow-hidden ${images.length > 1 ? 'flex-1' : 'w-full'}`}>
-            <img src={images[0]} alt={vendorName} className="w-full h-full object-cover" />
+          <div className={`relative overflow-hidden ${images.length > 1 ? 'flex-1' : 'w-full'}`}>
+            <Image src={images[0]} alt={vendorName} fill sizes="(min-width: 1024px) 640px, 100vw" priority className="object-cover" />
           </div>
           {images.length > 1 && (
             <div className="flex-1 flex flex-col gap-2">
               <div className="flex gap-2 flex-1 min-h-0">
-                <div className="flex-1 overflow-hidden bg-surface">{images[1] && <img src={images[1]} alt="" className="w-full h-full object-cover" />}</div>
-                <div className="flex-1 overflow-hidden bg-surface">{images[2] && <img src={images[2]} alt="" className="w-full h-full object-cover" />}</div>
+                <div className="relative flex-1 overflow-hidden bg-surface">{images[1] && <Image src={images[1]} alt="" fill sizes="(min-width: 1024px) 320px, 50vw" className="object-cover" />}</div>
+                <div className="relative flex-1 overflow-hidden bg-surface">{images[2] && <Image src={images[2]} alt="" fill sizes="(min-width: 1024px) 320px, 50vw" className="object-cover" />}</div>
               </div>
               <div className="flex gap-2 flex-1 min-h-0">
-                <div className="flex-1 overflow-hidden bg-surface">{images[3] && <img src={images[3]} alt="" className="w-full h-full object-cover" />}</div>
-                <div className="flex-1 overflow-hidden bg-surface">{images[4] && <img src={images[4]} alt="" className="w-full h-full object-cover" />}</div>
+                <div className="relative flex-1 overflow-hidden bg-surface">{images[3] && <Image src={images[3]} alt="" fill sizes="(min-width: 1024px) 320px, 50vw" className="object-cover" />}</div>
+                <div className="relative flex-1 overflow-hidden bg-surface">{images[4] && <Image src={images[4]} alt="" fill sizes="(min-width: 1024px) 320px, 50vw" className="object-cover" />}</div>
               </div>
             </div>
           )}
