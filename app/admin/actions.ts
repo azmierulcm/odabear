@@ -64,6 +64,26 @@ export async function adminCreateListing(payload: {
 
 // ─── Subscription billing (platform DuitNow + vendor payments) ───────────────
 
+// Upload the platform billing QR image. Done server-side with the service role
+// because the public-read `payment-qr` bucket blocks client-side writes (RLS).
+// The QR is *decoded* in the browser (canvas) — only the storage write moves here.
+export async function uploadBillingQr(formData: FormData): Promise<{ url: string }> {
+  await verifyAdmin()
+  const file = formData.get('file')
+  if (!(file instanceof File)) throw new Error('Please choose a QR image.')
+  if (file.size > 5 * 1024 * 1024) throw new Error('File too large. Max 5 MB.')
+
+  const ext  = file.name.split('.').pop() ?? 'png'
+  const path = `platform/billing_${Date.now()}.${ext}`
+  const { error: upErr } = await adminSupabase.storage
+    .from('payment-qr')
+    .upload(path, file, { upsert: true })
+  if (upErr) throw new Error(`Upload failed: ${upErr.message}`)
+
+  const { data: pub } = adminSupabase.storage.from('payment-qr').getPublicUrl(path)
+  return { url: pub.publicUrl }
+}
+
 export async function savePlatformBilling(input: {
   payload: string | null
   name: string

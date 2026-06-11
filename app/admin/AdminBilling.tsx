@@ -1,10 +1,9 @@
 'use client'
 
 import { useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
 import { isDuitNowQr } from '@/lib/duitnowQr'
 import { decodeQrFromFile } from '@/lib/decodeQrImage'
-import { savePlatformBilling, reviewSubscriptionPayment, getSubscriptionReceiptUrl, type SubPaymentRow } from './actions'
+import { uploadBillingQr, savePlatformBilling, reviewSubscriptionPayment, getSubscriptionReceiptUrl, type SubPaymentRow } from './actions'
 
 interface Props {
   initialBilling: { payload: string | null; name: string; qrUrl: string | null; fromEnv: boolean }
@@ -12,8 +11,6 @@ interface Props {
 }
 
 export default function AdminBilling({ initialBilling, initialPayments }: Props) {
-  const supabase = createClient()
-
   // ── Billing QR config ──
   const [name,    setName]    = useState(initialBilling.name)
   const [payload, setPayload] = useState<string | null>(initialBilling.payload)
@@ -24,20 +21,26 @@ export default function AdminBilling({ initialBilling, initialPayments }: Props)
   const handleQr = async (file: File) => {
     if (file.size > 5 * 1024 * 1024) { setMsg({ ok: false, text: 'File too large. Max 5 MB.' }); return }
     setBusy(true); setMsg(null)
-    const path = `platform/billing_${Date.now()}.${file.name.split('.').pop() ?? 'png'}`
-    const [decoded, up] = await Promise.all([
-      decodeQrFromFile(file).catch(() => null),
-      supabase.storage.from('payment-qr').upload(path, file, { upsert: true }),
-    ])
-    setBusy(false)
-    if (up.error) { setMsg({ ok: false, text: `Upload failed: ${up.error.message}` }); return }
-    const { data: pub } = supabase.storage.from('payment-qr').getPublicUrl(up.data.path)
-    const newPayload = decoded && isDuitNowQr(decoded) ? decoded : null
-    setPayload(newPayload)
-    setQrUrl(pub.publicUrl)
-    setMsg(newPayload
-      ? { ok: true, text: 'QR read successfully — amount will auto-fill for vendors.' }
-      : { ok: false, text: 'Image uploaded, but no DuitNow QR detected. Vendors must enter the amount manually.' })
+    // Decode in the browser (canvas); upload via the service-role server action
+    // (the public-read payment-qr bucket blocks client-side writes).
+    const fd = new FormData()
+    fd.append('file', file)
+    try {
+      const [decoded, up] = await Promise.all([
+        decodeQrFromFile(file).catch(() => null),
+        uploadBillingQr(fd),
+      ])
+      const newPayload = decoded && isDuitNowQr(decoded) ? decoded : null
+      setPayload(newPayload)
+      setQrUrl(up.url)
+      setMsg(newPayload
+        ? { ok: true, text: 'QR read successfully — amount will auto-fill for vendors.' }
+        : { ok: false, text: 'Image uploaded, but no DuitNow QR detected. Vendors must enter the amount manually.' })
+    } catch (e) {
+      setMsg({ ok: false, text: e instanceof Error ? e.message : 'Upload failed. Please try again.' })
+    } finally {
+      setBusy(false)
+    }
   }
 
   const handleSave = async () => {
