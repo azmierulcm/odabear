@@ -90,7 +90,7 @@ export default function MenuClient({ vendor, categories }: Props) {
       notes:            mNotes,
       delivery_type:    mDelivery,
       delivery_address: mAddress,
-      items:            cart.map((ci) => ({ name: ci.item.name, price: ci.item.price, quantity: ci.quantity })),
+      items:            cart.map((ci) => ({ id: ci.item.id, name: ci.item.name, price: ci.item.price, quantity: ci.quantity })),
       total_price:      totalPrice,
     })
 
@@ -553,7 +553,7 @@ function DesktopCartPanel({ cart, vendor, onUpdate, onClearCart, totalPrice, sup
       notes,
       delivery_type:    deliveryType,
       delivery_address: address,
-      items:            cart.map((ci) => ({ name: ci.item.name, price: ci.item.price, quantity: ci.quantity })),
+      items:            cart.map((ci) => ({ id: ci.item.id, name: ci.item.name, price: ci.item.price, quantity: ci.quantity })),
       total_price:      totalPrice,
     })
 

@@ -27,6 +27,7 @@ export async function submitBookingReceipt(
 
   const file = formData.get('file')
   if (!(file instanceof File)) return { ok: false, error: 'Please choose a receipt image.' }
+  if (!file.type.startsWith('image/')) return { ok: false, error: 'Please upload an image file (photo or screenshot).' }
   if (file.size > 5 * 1024 * 1024) return { ok: false, error: 'File too large. Max 5 MB.' }
 
   const ext = file.name.split('.').pop() ?? 'jpg'

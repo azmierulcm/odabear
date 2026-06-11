@@ -128,6 +128,7 @@ export default function BookingClient({ vendor, categories, bookings = [] }: Pro
       vendor_id:      vendor.id,
       customer_name:  guestName.trim(),
       customer_phone: guestPhone.trim(),
+      service_id:     selectedService.id,
       service_name:   selectedService.name,
       service_price:  selectedService.price,
       start_date:     checkIn,

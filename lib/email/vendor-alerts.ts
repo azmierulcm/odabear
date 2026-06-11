@@ -226,3 +226,97 @@ export async function notifyReceiptUploaded(vendorId: string, info: {
     console.error('[notifyReceiptUploaded] failed:', err)
   }
 }
+
+// ─── Subscription lifecycle ────────────────────────────────────
+// Both are sent by the daily expire-trials cron. The dashboard has self-serve
+// renewal (SubscriptionCard), so the CTA goes straight there.
+
+export async function notifyAccessExpired(info: {
+  email: string
+  vendorName: string
+  wasTrial: boolean
+}): Promise<void> {
+  try {
+    const what = info.wasTrial ? 'free trial' : 'subscription'
+    const bodyHtml = `
+      <p style="margin:0 0 16px;font-size:16px;color:#222222;line-height:1.6;">Hi ${escapeHtml(info.vendorName)},</p>
+      <p style="margin:0 0 16px;font-size:16px;color:#222222;line-height:1.6;">
+        Your ${what} for <strong>${escapeHtml(info.vendorName)}</strong> on Jomoda has ended.
+        Your store is now hidden and customers can no longer place orders.
+      </p>
+      <table width="100%" cellpadding="0" cellspacing="0" style="border:2px solid #FF385C;border-radius:12px;margin:24px 0 8px;">
+        <tr><td style="padding:20px 24px;text-align:center;">
+          <p style="margin:0;font-size:13px;color:#717171;text-transform:uppercase;letter-spacing:0.5px;">Monthly plan</p>
+          <p style="margin:8px 0 4px;font-size:40px;font-weight:900;color:#222222;line-height:1;">
+            <span style="font-size:20px;font-weight:700;color:#717171;vertical-align:super;">RM</span>150
+            <span style="font-size:16px;font-weight:600;color:#717171;">/mo</span>
+          </p>
+          <p style="margin:0;font-size:13px;color:#717171;">0% commission · No contracts · Cancel anytime</p>
+        </td></tr>
+      </table>
+      <p style="margin:16px 0 0;font-size:14px;color:#717171;text-align:center;line-height:1.6;">
+        Renew in under a minute — scan, pay, and your store goes live again instantly.<br/>
+        Your store data is safe. Nothing is deleted.
+      </p>
+    `
+    const html = wrapEmail({
+      headerEmoji: '⏰',
+      headerGradient: 'linear-gradient(135deg,#E31C5F,#FF385C)',
+      headerTitle: info.wasTrial ? 'Your free trial has ended' : 'Your subscription has ended',
+      headerSubtitle: 'Your store is currently hidden',
+      bodyHtml,
+      ctaLabel: 'Renew & go live →',
+      ctaUrl: DASHBOARD_URL,
+    })
+    const { error } = await resend.emails.send({
+      from: 'Jomoda <hello@jomoda.my>',
+      to: info.email,
+      subject: `Your Jomoda ${info.wasTrial ? 'trial' : 'subscription'} has ended — keep ${info.vendorName} live`,
+      html,
+    })
+    if (error) console.error('[notifyAccessExpired] Resend error:', error)
+  } catch (err) {
+    console.error('[notifyAccessExpired] failed:', err)
+  }
+}
+
+export async function notifyRenewalReminder(info: {
+  email: string
+  vendorName: string
+  daysLeft: number
+  isTrial: boolean
+}): Promise<void> {
+  try {
+    const what = info.isTrial ? 'free trial' : 'subscription'
+    const dayWord = `${info.daysLeft} day${info.daysLeft !== 1 ? 's' : ''}`
+    const bodyHtml = `
+      <p style="margin:0 0 16px;font-size:16px;color:#222222;line-height:1.6;">Hi ${escapeHtml(info.vendorName)},</p>
+      <p style="margin:0 0 16px;font-size:16px;color:#222222;line-height:1.6;">
+        Your ${what} for <strong>${escapeHtml(info.vendorName)}</strong> ends in <strong>${dayWord}</strong>.
+        Renew now so your store stays live and customers can keep ordering without interruption.
+      </p>
+      <p style="margin:0;font-size:14px;color:#717171;line-height:1.6;">
+        Renewing takes under a minute: open your dashboard, scan the payment QR (RM150),
+        upload your receipt — done.
+      </p>
+    `
+    const html = wrapEmail({
+      headerEmoji: '⏳',
+      headerGradient: 'linear-gradient(135deg,#D97706,#F59E0B)',
+      headerTitle: `${dayWord} left on your ${what}`,
+      headerSubtitle: 'Renew now to stay live',
+      bodyHtml,
+      ctaLabel: 'Renew now →',
+      ctaUrl: DASHBOARD_URL,
+    })
+    const { error } = await resend.emails.send({
+      from: 'Jomoda <hello@jomoda.my>',
+      to: info.email,
+      subject: `⏳ ${info.vendorName}: ${dayWord} left on your Jomoda ${what}`,
+      html,
+    })
+    if (error) console.error('[notifyRenewalReminder] Resend error:', error)
+  } catch (err) {
+    console.error('[notifyRenewalReminder] failed:', err)
+  }
+}

@@ -1,5 +1,5 @@
 // Shared HTML wrapper for vendor notification emails — keeps every email on
-// the same branded card layout as lib/email/trial-expired.ts.
+// the same branded card layout.
 
 export function escapeHtml(value: string): string {
   return value

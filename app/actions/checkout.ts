@@ -14,6 +14,7 @@ const CheckoutSchema = z.object({
   delivery_type:    z.enum(['pickup', 'delivery']),
   delivery_address: z.string().max(300).optional().default(''),
   items: z.array(z.object({
+    id:       z.string().uuid('Invalid item.'),
     name:     z.string().min(1).max(100),
     price:    z.number().positive().max(10000),
     quantity: z.number().int().positive().max(99),
@@ -65,12 +66,40 @@ export async function checkoutToWhatsApp(
   }
   const payload = parsed.data
 
-  // 2. Re-derive total server-side — never trust the client total
-  const derivedTotal = payload.items.reduce(
-    (sum, item) => sum + item.price * item.quantity, 0
-  )
+  // 2. Re-price the cart from the database — never trust client prices.
+  //    Items must exist, be available, and belong to this vendor (via category).
+  const cartIds = [...new Set(payload.items.map((i) => i.id))]
+  const { data: dbItems, error: itemsErr } = await adminSupabase
+    .from('items')
+    .select('id, name, price, is_available, categories!inner(vendor_id)')
+    .in('id', cartIds)
+    .eq('categories.vendor_id', payload.vendor_id)
+  if (itemsErr) {
+    console.error('[checkoutToWhatsApp] item lookup failed:', itemsErr.message)
+    return { success: false, error: 'We could not check your cart. Please try again.' }
+  }
+  const priceById = new Map((dbItems ?? []).map((i) => [i.id, i]))
+
+  const pricedItems: { name: string; price: number; quantity: number }[] = []
+  let derivedTotal = 0
+  for (const line of payload.items) {
+    const dbItem = priceById.get(line.id)
+    if (!dbItem) {
+      return { success: false, error: `"${line.name}" is no longer on the menu. Please refresh and try again.` }
+    }
+    if (!dbItem.is_available) {
+      return { success: false, error: `"${dbItem.name}" is sold out. Please remove it from your cart.` }
+    }
+    const price = Number(dbItem.price)
+    pricedItems.push({ name: dbItem.name, price, quantity: line.quantity })
+    derivedTotal += price * line.quantity
+  }
+  derivedTotal = Math.round(derivedTotal * 100) / 100
+
+  // If the total the customer saw no longer matches (vendor changed a price
+  // mid-session), stop and ask them to refresh rather than charging a surprise.
   if (Math.abs(derivedTotal - payload.total_price) > 0.01) {
-    return { success: false, error: 'Order total mismatch. Please refresh and try again.' }
+    return { success: false, error: 'Prices have been updated. Please refresh and try again.' }
   }
 
   // 3. Rate limit — max 3 orders per customer per vendor per 60 seconds
@@ -116,8 +145,8 @@ export async function checkoutToWhatsApp(
       short_order_id,
       customer_name:    payload.customer_name.trim(),
       customer_phone:   payload.customer_phone.trim() || null,
-      cart_items:       payload.items,
-      items:            payload.items,
+      cart_items:       pricedItems,
+      items:            pricedItems,
       total_price:      derivedTotal,
       delivery_type:    payload.delivery_type,
       delivery_address: payload.delivery_type === 'delivery'
@@ -135,7 +164,7 @@ export async function checkoutToWhatsApp(
       customerName:    payload.customer_name.trim(),
       customerPhone:   payload.customer_phone.trim() || null,
       total:           derivedTotal,
-      items:           payload.items,
+      items:           pricedItems,
       deliveryType:    payload.delivery_type,
       deliveryAddress: payload.delivery_type === 'delivery' ? payload.delivery_address.trim() : null,
       notes:           payload.notes.trim() || null,
@@ -166,7 +195,7 @@ export async function checkoutToWhatsApp(
         vendor_id:      payload.vendor_id,
         customer_name:  payload.customer_name.trim(),
         customer_phone: payload.customer_phone.trim() || null,
-        items:          payload.items,
+        items:          pricedItems,
         total_price:    derivedTotal,
         notes:          notesWithDelivery || null,
         status:         'pending',
@@ -182,7 +211,7 @@ export async function checkoutToWhatsApp(
       customerName:    payload.customer_name.trim(),
       customerPhone:   payload.customer_phone.trim() || null,
       total:           derivedTotal,
-      items:           payload.items,
+      items:           pricedItems,
       deliveryType:    payload.delivery_type,
       deliveryAddress: payload.delivery_type === 'delivery' ? payload.delivery_address.trim() : null,
       notes:           payload.notes.trim() || null,

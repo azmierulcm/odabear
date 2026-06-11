@@ -71,6 +71,7 @@ export async function uploadBillingQr(formData: FormData): Promise<{ url: string
   await verifyAdmin()
   const file = formData.get('file')
   if (!(file instanceof File)) throw new Error('Please choose a QR image.')
+  if (!file.type.startsWith('image/')) throw new Error('Please upload an image file.')
   if (file.size > 5 * 1024 * 1024) throw new Error('File too large. Max 5 MB.')
 
   const ext  = file.name.split('.').pop() ?? 'png'
