@@ -13,10 +13,10 @@ const DEMOS = [
     badgeCls: 'bg-orange-100 text-orange-700',
   },
   {
-    href: '/demo-retail',
+    href: 'https://www.odabear.com/bubudesserts',
     emoji: '🛒',
     label: 'Retail Store',
-    sub: 'Lumina Minimalist Living',
+    sub: 'Bubu Desserts',
     badge: 'Retail',
     badgeCls: 'bg-blue-100 text-blue-700',
   },
@@ -48,7 +48,7 @@ export default function DemoPickerButton() {
         onClick={() => setOpen((v) => !v)}
         className="w-full sm:w-auto border-2 border-border text-ink font-semibold px-8 py-4 rounded-xl hover:border-ink transition-colors text-base flex items-center justify-center gap-2"
       >
-        View Demo Store
+        View Sample Store
         <svg
           className={`w-4 h-4 text-fog transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
           fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}
@@ -60,7 +60,7 @@ export default function DemoPickerButton() {
       {open && (
         <div className="absolute left-1/2 -translate-x-1/2 sm:left-0 sm:translate-x-0 mt-2 w-72 bg-white rounded-2xl border border-border shadow-xl z-50 overflow-hidden">
           <p className="text-[11px] font-bold uppercase tracking-widest text-fog px-4 pt-4 pb-2">
-            Choose a demo
+            Choose a sample
           </p>
           {DEMOS.map((d) => (
             <Link
@@ -82,7 +82,7 @@ export default function DemoPickerButton() {
             </Link>
           ))}
           <div className="px-4 py-3 border-t border-border bg-surface">
-            <p className="text-[11px] text-fog text-center">Live demos — no login required</p>
+            <p className="text-[11px] text-fog text-center">Live samples — no login required</p>
           </div>
         </div>
       )}
