@@ -5,17 +5,17 @@ import Link from 'next/link'
 
 const DEMOS = [
   {
-    href: '/demo-restaurant',
+    href: 'https://www.odabear.com/milalalalala-roti-jala',
     emoji: '🍽️',
-    label: 'Restaurant',
-    sub: 'Bakarizu Premium Yakiniku',
+    label: 'Mini Catering',
+    sub: 'Milalalalala Roti Jala',
     badge: 'F&B',
     badgeCls: 'bg-orange-100 text-orange-700',
   },
   {
     href: 'https://www.odabear.com/bubudesserts',
     emoji: '🛒',
-    label: 'Retail Store',
+    label: 'Dessert Store',
     sub: 'Bubu Desserts',
     badge: 'Retail',
     badgeCls: 'bg-blue-100 text-blue-700',
