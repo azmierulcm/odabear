@@ -5,6 +5,7 @@ import Image from 'next/image'
 import { createClient } from '@/lib/supabase/client'
 import { checkoutToWhatsApp } from '@/app/actions/checkout'
 import { computeDeliveryFee } from '@/lib/delivery'
+import { saveLastOrder, getLastOrder, clearLastOrder, relativeTime, type SavedOrder } from '@/lib/lastOrder'
 import type { Vendor, CategoryWithItems, Item, CartItem, PaymentMethod } from '@/types/menu'
 
 interface Props {
@@ -23,6 +24,22 @@ export default function MenuClient({ vendor, categories }: Props) {
   const tabRefs      = useRef<Record<string, HTMLButtonElement | null>>({})
   const scrollingRef = useRef(false)
   const supabase     = useMemo(() => createClient(), [])
+
+  // Flat lookup of every live menu item — used to re-resolve a saved "order again".
+  const itemsById = useMemo(() => {
+    const map = new Map<string, Item>()
+    categories.forEach((c) => c.items.forEach((it) => map.set(it.id, it)))
+    return map
+  }, [categories])
+
+  // ── Repeat order (localStorage) ────────────────────────────
+  const [lastOrder, setLastOrder] = useState<SavedOrder | null>(null)
+  const [repeatNote, setRepeatNote] = useState<string | null>(null)
+  // Bumped on each repeat so the desktop cart panel can re-seed its detail fields.
+  const [repeatSignal, setRepeatSignal] = useState(0)
+
+  // Read after mount only — avoids an SSR/client hydration mismatch.
+  useEffect(() => { setLastOrder(getLastOrder(vendor.id)) }, [vendor.id])
 
   // ── Mobile drawer state ────────────────────────────────────
   const [drawerOpen,   setDrawerOpen]   = useState(false)
@@ -52,6 +69,36 @@ export default function MenuClient({ vendor, categories }: Props) {
 
   const totalItems = cart.reduce((s, ci) => s + ci.quantity, 0)
   const totalPrice = cart.reduce((s, ci) => s + ci.item.price * ci.quantity, 0)
+
+  // Rebuild the cart from a saved order against the *current* menu: keep only items
+  // that still exist and are available, with today's price. Then pre-fill checkout.
+  const repeatLastOrder = () => {
+    if (!lastOrder) return
+    const rebuilt: CartItem[] = []
+    let skipped = 0
+    for (const saved of lastOrder.items) {
+      const live = itemsById.get(saved.id)
+      if (live && live.is_available) rebuilt.push({ item: live, quantity: saved.quantity })
+      else skipped++
+    }
+    if (rebuilt.length === 0) {
+      setRepeatNote('Those items aren’t on the menu right now — please pick again.')
+      return
+    }
+    setCart(rebuilt)
+    const c = lastOrder.customer
+    setMName(c.name); setMPhone(c.phone); setMNotes(c.notes)
+    setMDelivery(c.deliveryType); setMAddress(c.address)
+    setRepeatNote(skipped > 0 ? `Added ${rebuilt.length} item${rebuilt.length === 1 ? '' : 's'} — ${skipped} no longer available.` : null)
+    setRepeatSignal((n) => n + 1)
+    setMobileStage('cart')
+    setDrawerOpen(true)
+  }
+
+  const dismissLastOrder = () => {
+    clearLastOrder(vendor.id)
+    setLastOrder(null)
+  }
 
   // ── Delivery fee (mobile flow — desktop computes its own, see DesktopCartPanel) ──
   const subtotalLabel = vendor.delivery_fee > 0 ? 'Subtotal' : 'Total'
@@ -106,6 +153,13 @@ export default function MenuClient({ vendor, categories }: Props) {
       setMError(result.error ?? 'Something went wrong. Please try again.')
       return
     }
+
+    saveLastOrder(vendor.id, {
+      items:        cart.map((ci) => ({ id: ci.item.id, name: ci.item.name, quantity: ci.quantity })),
+      customer:     { name: mName, phone: mPhone, deliveryType: mDelivery, address: mAddress, notes: mNotes },
+      placedAt:     Date.now(),
+      shortOrderId: result.short_order_id ?? undefined,
+    })
 
     setCart([])
 
@@ -242,6 +296,14 @@ export default function MenuClient({ vendor, categories }: Props) {
 
         {/* Left column */}
         <div className="pb-40 lg:pb-16">
+          {lastOrder && cart.length === 0 && (
+            <RepeatOrderBanner
+              order={lastOrder}
+              note={repeatNote}
+              onRepeat={repeatLastOrder}
+              onDismiss={dismissLastOrder}
+            />
+          )}
           {(vendor.description || vendor.promo_text) && (
             <div className="mb-8 pb-8 border-b border-border space-y-4">
               {vendor.description && <p className="text-base text-ink leading-relaxed whitespace-pre-line">{vendor.description}</p>}
@@ -272,12 +334,14 @@ export default function MenuClient({ vendor, categories }: Props) {
         <div className="hidden lg:block">
           <div className="sticky top-[57px]">
             <DesktopCartPanel
+              key={`cart-${repeatSignal}`}
               cart={cart}
               vendor={vendor}
               onUpdate={updateQuantity}
               onClearCart={() => setCart([])}
               totalPrice={totalPrice}
               supabase={supabase}
+              seedCustomer={repeatSignal > 0 ? (lastOrder?.customer ?? null) : null}
             />
           </div>
         </div>
@@ -309,6 +373,9 @@ export default function MenuClient({ vendor, categories }: Props) {
               <>
                 <DrawerHeader title="Your order" onClose={closeDrawer} />
                 <div className="overflow-y-auto flex-1 px-5 py-4 space-y-5">
+                  {repeatNote && (
+                    <p className="text-xs text-fog bg-surface rounded-xl px-4 py-2.5">{repeatNote}</p>
+                  )}
                   {cart.map((ci) => (
                     <div key={ci.item.id} className="flex items-center gap-3">
                       <div className="flex-1 min-w-0">
@@ -524,19 +591,22 @@ function HeroGrid({ gallery, vendorName }: { gallery: string[]; vendorName: stri
 
 type DesktopStage = 'form' | 'confirmed'
 
-function DesktopCartPanel({ cart, vendor, onUpdate, onClearCart, totalPrice, supabase }: {
+function DesktopCartPanel({ cart, vendor, onUpdate, onClearCart, totalPrice, supabase, seedCustomer }: {
   cart: CartItem[]
   vendor: Vendor
   onUpdate: (itemId: string, delta: number) => void
   onClearCart: () => void
   totalPrice: number
   supabase: ReturnType<typeof createClient>
+  // Set only when the customer taps "Order again" — pre-fills the checkout fields.
+  // The parent remounts this panel (via key) on repeat so these lazy seeds re-apply.
+  seedCustomer: SavedOrder['customer'] | null
 }) {
-  const [name,         setName]         = useState('')
-  const [phone,        setPhone]        = useState('')
-  const [notes,        setNotes]        = useState('')
-  const [deliveryType, setDeliveryType] = useState<DeliveryType>('pickup')
-  const [address,      setAddress]      = useState('')
+  const [name,         setName]         = useState(() => seedCustomer?.name ?? '')
+  const [phone,        setPhone]        = useState(() => seedCustomer?.phone ?? '')
+  const [notes,        setNotes]        = useState(() => seedCustomer?.notes ?? '')
+  const [deliveryType, setDeliveryType] = useState<DeliveryType>(() => seedCustomer?.deliveryType ?? 'pickup')
+  const [address,      setAddress]      = useState(() => seedCustomer?.address ?? '')
   const [stage,        setStage]        = useState<DesktopStage>('form')
   const [busy,         setBusy]         = useState(false)
   const [orderId,      setOrderId]      = useState<string | null>(null)
@@ -572,6 +642,13 @@ function DesktopCartPanel({ cart, vendor, onUpdate, onClearCart, totalPrice, sup
       setSubmitError(result.error ?? 'Something went wrong.')
       return
     }
+
+    saveLastOrder(vendor.id, {
+      items:        cart.map((ci) => ({ id: ci.item.id, name: ci.item.name, quantity: ci.quantity })),
+      customer:     { name, phone, deliveryType, address, notes },
+      placedAt:     Date.now(),
+      shortOrderId: result.short_order_id ?? undefined,
+    })
 
     // New flow: send the customer to their order status / payment page.
     if (result.order_token) {
@@ -687,6 +764,38 @@ function DesktopCartPanel({ cart, vendor, onUpdate, onClearCart, totalPrice, sup
           </button>
         </div>
       </form>
+    </div>
+  )
+}
+
+// ─── Repeat Order Banner ─────────────────────────────────────
+
+function RepeatOrderBanner({ order, note, onRepeat, onDismiss }: {
+  order: SavedOrder
+  note: string | null
+  onRepeat: () => void
+  onDismiss: () => void
+}) {
+  const summary = order.items.map((it) => `${it.quantity}× ${it.name}`).join(' · ')
+  return (
+    <div className="mb-8 rounded-2xl border border-brand/20 bg-brand/5 p-4 sm:p-5">
+      <div className="flex items-start gap-3">
+        <span className="text-xl shrink-0">🔁</span>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-sm font-bold text-ink">Order again</p>
+            <button onClick={onDismiss} aria-label="Dismiss"
+              className="text-fog hover:text-ink text-lg leading-none -mt-1 shrink-0">×</button>
+          </div>
+          <p className="text-xs text-fog mt-0.5">Your last order · {relativeTime(order.placedAt)}</p>
+          <p className="text-sm text-ink mt-2 leading-relaxed line-clamp-2">{summary}</p>
+          {note && <p className="text-xs text-fog mt-2">{note}</p>}
+          <button onClick={onRepeat}
+            className="mt-3 w-full sm:w-auto bg-gradient-to-r from-brand-dark to-brand text-white text-sm font-semibold rounded-xl px-5 py-2.5 hover:opacity-90 transition-opacity">
+            Add to cart →
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
