@@ -40,6 +40,7 @@ export async function notifyNewOrder(vendorId: string, info: {
   customerName: string
   customerPhone: string | null
   total: number
+  deliveryFee: number
   items: OrderItemInfo[]
   deliveryType: 'pickup' | 'delivery'
   deliveryAddress: string | null
@@ -54,6 +55,12 @@ export async function notifyNewOrder(vendorId: string, info: {
         <td style="font-size:14px;color:#222222;padding:4px 0;">${it.quantity}x ${escapeHtml(it.name)}</td>
         <td align="right" style="font-size:14px;color:#222222;padding:4px 0;white-space:nowrap;">RM ${(it.price * it.quantity).toFixed(2)}</td>
       </tr>`).join('')
+
+    const deliveryFeeRow = info.deliveryFee > 0 ? `
+      <tr>
+        <td style="font-size:14px;color:#717171;padding:4px 0;">Delivery fee</td>
+        <td align="right" style="font-size:14px;color:#717171;padding:4px 0;white-space:nowrap;">RM ${info.deliveryFee.toFixed(2)}</td>
+      </tr>` : ''
 
     const deliveryLine = info.deliveryType === 'delivery'
       ? `🚚 Delivery to: ${escapeHtml(info.deliveryAddress ?? '—')}`
@@ -71,6 +78,7 @@ export async function notifyNewOrder(vendorId: string, info: {
           </p>
           <table width="100%" cellpadding="0" cellspacing="0">
             ${itemRows}
+            ${deliveryFeeRow}
             <tr><td colspan="2" style="padding-top:8px;border-top:1px solid #DDDDDD;"></td></tr>
             <tr>
               <td style="font-size:16px;font-weight:800;color:#222222;padding-top:8px;">Total</td>

@@ -26,6 +26,7 @@ export default async function OrderStatusPage({ params }: { params: Promise<{ to
   const o = order as Order
   const v = vendor as Vendor
   const total = Number(o.total_price)
+  const deliveryFee = Number(o.delivery_fee ?? 0)
   const items: OrderLineItem[] = (o.items?.length ? o.items : o.cart_items) ?? []
 
   // Pre-render a dynamic, amount-filled QR for any method carrying a DuitNow payload.
@@ -65,6 +66,7 @@ export default async function OrderStatusPage({ params }: { params: Promise<{ to
     '',
     'Items:',
     itemLines,
+    deliveryFee > 0 ? `Delivery fee: RM ${deliveryFee.toFixed(2)}` : null,
     '',
     `Total Paid: RM ${amount}`,
     '',
@@ -82,6 +84,7 @@ export default async function OrderStatusPage({ params }: { params: Promise<{ to
       vendorName={v.name}
       vendorLogo={v.logo_url}
       total={total}
+      deliveryFee={deliveryFee}
       items={items}
       initialPaymentStatus={o.payment_status}
       payments={payments}

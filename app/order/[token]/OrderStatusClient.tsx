@@ -14,6 +14,7 @@ interface Props {
   vendorName: string
   vendorLogo: string | null
   total: number
+  deliveryFee: number
   items: OrderLineItem[]
   initialPaymentStatus: PaymentStatus
   payments: PaymentView[]
@@ -30,7 +31,7 @@ const BADGE: Record<PaymentStatus, { label: string; cls: string }> = {
 
 export default function OrderStatusClient({
   token, shortOrderId, customerFirstName, vendorName, vendorLogo,
-  total, items, initialPaymentStatus, payments, waUrl, notifyPaidUrl,
+  total, deliveryFee, items, initialPaymentStatus, payments, waUrl, notifyPaidUrl,
 }: Props) {
   const [status, setStatus] = useState<PaymentStatus>(initialPaymentStatus)
   const [uploading, setUploading] = useState(false)
@@ -130,6 +131,12 @@ export default function OrderStatusClient({
               <span className="text-fog tabular-nums">RM {(it.price * it.quantity).toFixed(2)}</span>
             </div>
           ))}
+          {deliveryFee > 0 && (
+            <div className="flex justify-between text-sm">
+              <span className="text-ink">Delivery fee</span>
+              <span className="text-fog tabular-nums">RM {deliveryFee.toFixed(2)}</span>
+            </div>
+          )}
           <div className="flex justify-between font-bold text-ink pt-2 border-t border-border">
             <span>Total</span>
             <span className="tabular-nums">RM {amountStr}</span>

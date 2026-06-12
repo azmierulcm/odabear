@@ -4,6 +4,7 @@ import { useState, useRef, useMemo, useEffect } from 'react'
 import Image from 'next/image'
 import { createClient } from '@/lib/supabase/client'
 import { checkoutToWhatsApp } from '@/app/actions/checkout'
+import { computeDeliveryFee } from '@/lib/delivery'
 import type { Vendor, CategoryWithItems, Item, CartItem, PaymentMethod } from '@/types/menu'
 
 interface Props {
@@ -52,6 +53,12 @@ export default function MenuClient({ vendor, categories }: Props) {
   const totalItems = cart.reduce((s, ci) => s + ci.quantity, 0)
   const totalPrice = cart.reduce((s, ci) => s + ci.item.price * ci.quantity, 0)
 
+  // ── Delivery fee (mobile flow — desktop computes its own, see DesktopCartPanel) ──
+  const subtotalLabel = vendor.delivery_fee > 0 ? 'Subtotal' : 'Total'
+  const mShowDeliveryFee = mDelivery === 'delivery' && vendor.delivery_fee > 0
+  const mDeliveryFee = mDelivery === 'delivery' ? computeDeliveryFee(totalPrice, vendor) : 0
+  const mGrandTotal = Math.round((totalPrice + mDeliveryFee) * 100) / 100
+
   // ── Category scroll ────────────────────────────────────────
   const scrollToCategory = (id: string) => {
     setActiveCategory(id)
@@ -91,7 +98,7 @@ export default function MenuClient({ vendor, categories }: Props) {
       delivery_type:    mDelivery,
       delivery_address: mAddress,
       items:            cart.map((ci) => ({ id: ci.item.id, name: ci.item.name, price: ci.item.price, quantity: ci.quantity })),
-      total_price:      totalPrice,
+      total_price:      mGrandTotal,
     })
 
     if (!result.success) {
@@ -113,6 +120,7 @@ export default function MenuClient({ vendor, categories }: Props) {
       vendor.phone_number,
       result.short_order_id!,
       result.total_price!,
+      mDeliveryFee,
       cart,
       mDelivery,
       mAddress,
@@ -314,7 +322,7 @@ export default function MenuClient({ vendor, categories }: Props) {
                 </div>
                 <div className="px-5 pb-8 pt-4 border-t border-border space-y-4 shrink-0">
                   <div className="flex justify-between text-base font-bold text-ink">
-                    <span>Total</span>
+                    <span>{subtotalLabel}</span>
                     <span className="tabular-nums">RM {totalPrice.toFixed(2)}</span>
                   </div>
                   <button onClick={() => setMobileStage('checkout')}
@@ -340,7 +348,7 @@ export default function MenuClient({ vendor, categories }: Props) {
                     />
                   </div>
                   <div className="px-5 pb-8 pt-4 border-t border-border shrink-0 space-y-3">
-                    <OrderSummaryLine totalItems={totalItems} totalPrice={totalPrice} />
+                    <OrderTotals totalItems={totalItems} subtotal={totalPrice} deliveryFee={mDeliveryFee} showDeliveryFee={mShowDeliveryFee} />
                     <button type="submit"
                       className="w-full bg-gradient-to-r from-brand-dark to-brand text-white font-semibold rounded-xl py-3.5 hover:opacity-90 transition-opacity">
                       Continue to payment →
@@ -375,9 +383,8 @@ export default function MenuClient({ vendor, categories }: Props) {
                           <span className="text-fog tabular-nums">RM {(ci.item.price * ci.quantity).toFixed(2)}</span>
                         </div>
                       ))}
-                      <div className="flex justify-between font-bold text-ink pt-2 border-t border-border">
-                        <span>Total</span>
-                        <span className="tabular-nums">RM {totalPrice.toFixed(2)}</span>
+                      <div className="border-t border-border pt-2">
+                        <OrderTotals totalItems={totalItems} subtotal={totalPrice} deliveryFee={mDeliveryFee} showDeliveryFee={mShowDeliveryFee} hideItemCount />
                       </div>
                     </div>
                   </div>
@@ -386,7 +393,7 @@ export default function MenuClient({ vendor, categories }: Props) {
                       where the QR is pre-filled with the exact amount. Nothing to show here. */}
                 </div>
                 <div className="px-5 pb-8 pt-4 border-t border-border shrink-0 space-y-3">
-                  <OrderSummaryLine totalItems={totalItems} totalPrice={totalPrice} />
+                  <OrderTotals totalItems={totalItems} subtotal={totalPrice} deliveryFee={mDeliveryFee} showDeliveryFee={mShowDeliveryFee} />
                   {mError && (
                     <p className="text-xs text-brand bg-red-50 rounded-xl px-4 py-2.5 text-center">{mError}</p>
                   )}
@@ -536,6 +543,9 @@ function DesktopCartPanel({ cart, vendor, onUpdate, onClearCart, totalPrice, sup
   const [submitError,  setSubmitError]  = useState<string | null>(null)
 
   const totalItems = cart.reduce((s, ci) => s + ci.quantity, 0)
+  const showDeliveryFee = deliveryType === 'delivery' && vendor.delivery_fee > 0
+  const deliveryFee = deliveryType === 'delivery' ? computeDeliveryFee(totalPrice, vendor) : 0
+  const grandTotal = Math.round((totalPrice + deliveryFee) * 100) / 100
 
   useEffect(() => {
     if (cart.length > 0 && stage === 'confirmed') setStage('form')
@@ -554,7 +564,7 @@ function DesktopCartPanel({ cart, vendor, onUpdate, onClearCart, totalPrice, sup
       delivery_type:    deliveryType,
       delivery_address: address,
       items:            cart.map((ci) => ({ id: ci.item.id, name: ci.item.name, price: ci.item.price, quantity: ci.quantity })),
-      total_price:      totalPrice,
+      total_price:      grandTotal,
     })
 
     if (!result.success) {
@@ -575,6 +585,7 @@ function DesktopCartPanel({ cart, vendor, onUpdate, onClearCart, totalPrice, sup
       vendor.phone_number,
       result.short_order_id!,
       result.total_price!,
+      deliveryFee,
       cart,
       deliveryType,
       address,
@@ -636,7 +647,7 @@ function DesktopCartPanel({ cart, vendor, onUpdate, onClearCart, totalPrice, sup
           </div>
         ))}
         <div className="flex justify-between font-bold text-ink pt-2 border-t border-border">
-          <span>Total</span>
+          <span>{vendor.delivery_fee > 0 ? 'Subtotal' : 'Total'}</span>
           <span className="tabular-nums">RM {totalPrice.toFixed(2)}</span>
         </div>
       </div>
@@ -663,7 +674,7 @@ function DesktopCartPanel({ cart, vendor, onUpdate, onClearCart, totalPrice, sup
         )}
 
         <div className="space-y-3 pt-1">
-          <OrderSummaryLine totalItems={totalItems} totalPrice={totalPrice} />
+          <OrderTotals totalItems={totalItems} subtotal={totalPrice} deliveryFee={deliveryFee} showDeliveryFee={showDeliveryFee} />
           {submitError && (
             <p className="text-xs text-brand bg-red-50 rounded-xl px-4 py-2.5 text-center">{submitError}</p>
           )}
@@ -838,11 +849,32 @@ function CheckoutFields({
   )
 }
 
-function OrderSummaryLine({ totalItems, totalPrice }: { totalItems: number; totalPrice: number }) {
+function OrderTotals({ totalItems, subtotal, deliveryFee, showDeliveryFee, hideItemCount }: {
+  totalItems: number
+  subtotal: number
+  deliveryFee: number
+  showDeliveryFee: boolean
+  hideItemCount?: boolean
+}) {
+  const total = Math.round((subtotal + deliveryFee) * 100) / 100
   return (
-    <div className="flex justify-between text-sm text-fog">
-      <span>{totalItems} item{totalItems !== 1 ? 's' : ''}</span>
-      <span className="font-bold text-ink tabular-nums">RM {totalPrice.toFixed(2)}</span>
+    <div className="space-y-1">
+      {!hideItemCount && (
+        <div className="flex justify-between text-sm text-fog">
+          <span>{totalItems} item{totalItems !== 1 ? 's' : ''}</span>
+          <span className="tabular-nums">RM {subtotal.toFixed(2)}</span>
+        </div>
+      )}
+      {showDeliveryFee && (
+        <div className="flex justify-between text-sm text-fog">
+          <span>Delivery fee</span>
+          <span className="tabular-nums">{deliveryFee > 0 ? `RM ${deliveryFee.toFixed(2)}` : 'FREE'}</span>
+        </div>
+      )}
+      <div className="flex justify-between text-sm font-bold text-ink pt-1 border-t border-border">
+        <span>Total</span>
+        <span className="tabular-nums">RM {total.toFixed(2)}</span>
+      </div>
     </div>
   )
 }
@@ -853,6 +885,7 @@ function buildWhatsAppUrl(
   vendorPhone: string,
   shortOrderId: string,
   totalPrice: number,
+  deliveryFee: number,
   cart: CartItem[],
   deliveryType: DeliveryType,
   address: string,
@@ -869,8 +902,9 @@ function buildWhatsAppUrl(
     `Hello! I would like to confirm my order: ${shortOrderId}.`,
     `Name: ${customerName.trim()}.`,
     customerPhone.trim() ? `Phone: ${customerPhone.trim()}.` : '',
-    `Total: RM ${totalPrice.toFixed(2)}.`,
     `Items: ${itemSummary}.`,
+    deliveryFee > 0 ? `Delivery fee: RM ${deliveryFee.toFixed(2)}.` : '',
+    `Total: RM ${totalPrice.toFixed(2)}.`,
     deliveryType === 'delivery' ? `Delivery to: ${address.trim()}.` : 'Self pickup.',
     notes.trim() ? `Notes: ${notes.trim()}.` : '',
     'Please send me your bank details to proceed.',

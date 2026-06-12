@@ -3,6 +3,7 @@
 import { z } from 'zod'
 import { adminSupabase } from '@/lib/supabase/admin'
 import { notifyNewOrder } from '@/lib/email/vendor-alerts'
+import { computeDeliveryFee } from '@/lib/delivery'
 
 // ─── Validation schema ────────────────────────────────────────
 
@@ -66,7 +67,25 @@ export async function checkoutToWhatsApp(
   }
   const payload = parsed.data
 
-  // 2. Re-price the cart from the database — never trust client prices.
+  // 2. Verify the vendor is active before doing any pricing work.
+  //    We do this explicitly in code rather than relying on an RLS INSERT policy,
+  //    because customers are anonymous (anon role) and Postgres's INSERT … RETURNING
+  //    requires *both* INSERT and SELECT RLS policies to pass. There is no anon
+  //    SELECT policy on orders (vendors only), so using the user-scoped client with
+  //    .select() after insert always fails for unauthenticated customers — even when
+  //    the INSERT policy itself would allow it. Using adminSupabase here bypasses RLS
+  //    entirely; the vendor-active guard below replaces the safety that RLS provided.
+  const { data: vendorCheck } = await adminSupabase
+    .from('vendors')
+    .select('id, delivery_fee, free_delivery_min')
+    .eq('id', payload.vendor_id)
+    .eq('is_active', true)
+    .maybeSingle()
+  if (!vendorCheck) {
+    return { success: false, error: 'This shop is not accepting orders right now.' }
+  }
+
+  // 3. Re-price the cart from the database — never trust client prices.
   //    Items must exist, be available, and belong to this vendor (via category).
   const cartIds = [...new Set(payload.items.map((i) => i.id))]
   const { data: dbItems, error: itemsErr } = await adminSupabase
@@ -81,7 +100,7 @@ export async function checkoutToWhatsApp(
   const priceById = new Map((dbItems ?? []).map((i) => [i.id, i]))
 
   const pricedItems: { name: string; price: number; quantity: number }[] = []
-  let derivedTotal = 0
+  let subtotal = 0
   for (const line of payload.items) {
     const dbItem = priceById.get(line.id)
     if (!dbItem) {
@@ -92,9 +111,16 @@ export async function checkoutToWhatsApp(
     }
     const price = Number(dbItem.price)
     pricedItems.push({ name: dbItem.name, price, quantity: line.quantity })
-    derivedTotal += price * line.quantity
+    subtotal += price * line.quantity
   }
-  derivedTotal = Math.round(derivedTotal * 100) / 100
+  subtotal = Math.round(subtotal * 100) / 100
+
+  // Re-derive the delivery fee from the vendor's own config — never trust the
+  // client's delivery fee.
+  const deliveryFee = payload.delivery_type === 'delivery'
+    ? computeDeliveryFee(subtotal, vendorCheck)
+    : 0
+  const derivedTotal = Math.round((subtotal + deliveryFee) * 100) / 100
 
   // If the total the customer saw no longer matches (vendor changed a price
   // mid-session), stop and ask them to refresh rather than charging a surprise.
@@ -102,7 +128,7 @@ export async function checkoutToWhatsApp(
     return { success: false, error: 'Prices have been updated. Please refresh and try again.' }
   }
 
-  // 3. Rate limit — max 3 orders per customer per vendor per 60 seconds
+  // 4. Rate limit — max 3 orders per customer per vendor per 60 seconds
   const windowStart = new Date(Date.now() - 60_000).toISOString()
   const phone = payload.customer_phone.trim()
   const rateLimitQuery = adminSupabase
@@ -115,24 +141,6 @@ export async function checkoutToWhatsApp(
     : await rateLimitQuery.eq('customer_name', payload.customer_name.trim())
   if ((recentCount ?? 0) >= 3) {
     return { success: false, error: 'Too many orders. Please wait a minute and try again.' }
-  }
-
-  // 4. Verify the vendor is active before inserting.
-  //    We do this explicitly in code rather than relying on an RLS INSERT policy,
-  //    because customers are anonymous (anon role) and Postgres's INSERT … RETURNING
-  //    requires *both* INSERT and SELECT RLS policies to pass. There is no anon
-  //    SELECT policy on orders (vendors only), so using the user-scoped client with
-  //    .select() after insert always fails for unauthenticated customers — even when
-  //    the INSERT policy itself would allow it. Using adminSupabase here bypasses RLS
-  //    entirely; the vendor-active guard below replaces the safety that RLS provided.
-  const { data: vendorCheck } = await adminSupabase
-    .from('vendors')
-    .select('id')
-    .eq('id', payload.vendor_id)
-    .eq('is_active', true)
-    .maybeSingle()
-  if (!vendorCheck) {
-    return { success: false, error: 'This shop is not accepting orders right now.' }
   }
 
   const short_order_id = makeShortOrderId()
@@ -148,6 +156,7 @@ export async function checkoutToWhatsApp(
       cart_items:       pricedItems,
       items:            pricedItems,
       total_price:      derivedTotal,
+      delivery_fee:     deliveryFee,
       delivery_type:    payload.delivery_type,
       delivery_address: payload.delivery_type === 'delivery'
                           ? payload.delivery_address.trim()
@@ -164,6 +173,7 @@ export async function checkoutToWhatsApp(
       customerName:    payload.customer_name.trim(),
       customerPhone:   payload.customer_phone.trim() || null,
       total:           derivedTotal,
+      deliveryFee,
       items:           pricedItems,
       deliveryType:    payload.delivery_type,
       deliveryAddress: payload.delivery_type === 'delivery' ? payload.delivery_address.trim() : null,
@@ -211,6 +221,7 @@ export async function checkoutToWhatsApp(
       customerName:    payload.customer_name.trim(),
       customerPhone:   payload.customer_phone.trim() || null,
       total:           derivedTotal,
+      deliveryFee,
       items:           pricedItems,
       deliveryType:    payload.delivery_type,
       deliveryAddress: payload.delivery_type === 'delivery' ? payload.delivery_address.trim() : null,

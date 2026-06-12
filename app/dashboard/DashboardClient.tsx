@@ -2195,6 +2195,12 @@ function OrdersTab({ vendor, supabase }: {
                         </li>
                       ))}
                     </ul>
+                    {order.delivery_fee > 0 && (
+                      <div className="flex justify-between items-center px-4 py-2 bg-surface border-t border-border">
+                        <span className="text-sm text-fog">Delivery fee</span>
+                        <span className="text-fog tabular-nums">RM {Number(order.delivery_fee).toFixed(2)}</span>
+                      </div>
+                    )}
                     <div className="flex justify-between items-center px-4 py-2.5 bg-surface border-t border-border">
                       <span className="text-sm font-bold text-ink">Total</span>
                       <span className="font-bold text-ink tabular-nums">{totalStr}</span>
@@ -2393,6 +2399,8 @@ function SettingsTab({ userId, vendor, billing, onSaved, onPatchVendor, supabase
 }) {
   const [phone, setPhone]     = useState(vendor.phone_number)
   const [methods, setMethods] = useState<PMDraft[]>((vendor.payment_methods ?? []) as PMDraft[])
+  const [deliveryFee, setDeliveryFee]       = useState(String(vendor.delivery_fee ?? 0))
+  const [freeDeliveryMin, setFreeDeliveryMin] = useState(vendor.free_delivery_min != null ? String(vendor.free_delivery_min) : '')
   const [saving, setSaving]   = useState(false)
   const [uploadingIdx, setUploadingIdx] = useState<number | null>(null)
   const [uploadError, setUploadError]   = useState<string | null>(null)
@@ -2431,7 +2439,12 @@ function SettingsTab({ userId, vendor, billing, onSaved, onPatchVendor, supabase
     e.preventDefault()
     setSaving(true)
     setMessage(null)
-    const { data, error } = await supabase.from('vendors').update({ phone_number: phone.trim(), payment_methods: methods })
+    const { data, error } = await supabase.from('vendors').update({
+      phone_number:      phone.trim(),
+      payment_methods:   methods,
+      delivery_fee:      Number(deliveryFee) || 0,
+      free_delivery_min: freeDeliveryMin.trim() ? Number(freeDeliveryMin) : null,
+    })
       .eq('id', vendor.id).select().single()
     setSaving(false)
     if (error) {
@@ -2460,6 +2473,22 @@ function SettingsTab({ userId, vendor, billing, onSaved, onPatchVendor, supabase
             placeholder="60123456789" className={inputCls} />
         </Field>
       </div>
+
+      {vendor.business_type !== 'booking' && (
+        <div className="bg-white rounded-2xl border border-border p-6 space-y-4">
+          <h2 className="text-base font-semibold text-ink">Delivery</h2>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Delivery fee (RM)" hint="Added when a customer chooses delivery">
+              <input type="number" inputMode="decimal" step="0.01" min="0" value={deliveryFee}
+                onChange={(e) => setDeliveryFee(e.target.value)} placeholder="0.00" className={inputCls} />
+            </Field>
+            <Field label="Free delivery above (RM)" hint="Leave blank for no free delivery">
+              <input type="number" inputMode="decimal" step="0.01" min="0" value={freeDeliveryMin}
+                onChange={(e) => setFreeDeliveryMin(e.target.value)} placeholder="Optional" className={inputCls} />
+            </Field>
+          </div>
+        </div>
+      )}
 
       <div className="bg-white rounded-2xl border border-border p-6 space-y-4">
         <div className="flex items-center justify-between">

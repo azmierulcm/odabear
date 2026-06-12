@@ -25,6 +25,8 @@ export type Vendor = {
   location_lat: number | null
   location_lng: number | null
   makanjom_restaurant_id: string | null
+  delivery_fee: number
+  free_delivery_min: number | null
   subscription_status?: 'trial' | 'active' | 'expired' | null
   trial_ends_at?: string | null
 }
@@ -80,6 +82,7 @@ export type Order = {
   items: OrderLineItem[]
   cart_items: OrderLineItem[]
   total_price: number
+  delivery_fee: number
   delivery_type: 'pickup' | 'delivery'
   delivery_address: string | null
   status: OrderStatus
