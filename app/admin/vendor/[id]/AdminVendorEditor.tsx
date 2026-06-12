@@ -3,6 +3,7 @@
 import { useState, useRef } from 'react'
 import Image from 'next/image'
 import { compressImage } from '@/lib/compressImage'
+import RoomPhotoGallery from '@/app/components/RoomPhotoGallery'
 import type { Vendor, Category, Item, BusinessType } from '@/types/menu'
 import {
   adminUpdateVendor,
@@ -345,7 +346,7 @@ function CategoriesEditor({ vendor, categories, items, catLabel, setCategories, 
 
 // ─── Items Editor ─────────────────────────────────────────────
 
-const EMPTY = { name: '', description: '', price: '', image_url: '', category_id: '', is_available: true, sort_order: 0 }
+const EMPTY = { name: '', description: '', price: '', image_url: '', image_urls: [] as string[], category_id: '', is_available: true, sort_order: 0 }
 
 function ItemsEditor({ vendor, categories, items, itemLabel, isBooking, setItems }: {
   vendor: Vendor
@@ -387,19 +388,51 @@ function ItemsEditor({ vendor, categories, items, itemLabel, isBooking, setItems
     setUploading(false)
   }
 
+  // Multi-photo upload for booking type (up to 5 photos per room)
+  const handleRoomPhotoUpload = async (file: File) => {
+    if (form.image_urls.length >= 5) return
+    setUploading(true)
+    setUploadError(null)
+    try {
+      const compressed = await compressImage(file)
+      const formData = new FormData()
+      formData.append('file', compressed)
+      const url = await adminUploadImage(vendor.id, formData, 'item-images')
+      setForm((prev) => ({
+        ...prev,
+        image_urls: [...prev.image_urls, url],
+        // Keep image_url in sync with first photo for backward compat
+        image_url: prev.image_urls.length === 0 ? url : prev.image_url,
+      }))
+    } catch (err: unknown) {
+      setUploadError(err instanceof Error ? err.message : 'Upload failed')
+    }
+    setUploading(false)
+  }
+
+  const handleRemoveRoomPhoto = (i: number) => {
+    const oldUrl = form.image_urls[i]
+    if (oldUrl) void adminDeleteImage('item-images', oldUrl).catch(() => {})
+    setForm((prev) => {
+      const next = prev.image_urls.filter((_, idx) => idx !== i)
+      return { ...prev, image_urls: next, image_url: next[0] ?? '' }
+    })
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setBusy(true)
     try {
-      const payload = {
+      const payload: Record<string, unknown> = {
         category_id: form.category_id,
         name: form.name.trim(),
         description: form.description.trim() || null,
         price: parseFloat(form.price),
-        image_url: form.image_url.trim() || null,
+        image_url: isBooking ? (form.image_urls[0] ?? null) : (form.image_url.trim() || null),
         is_available: form.is_available,
         sort_order: form.sort_order,
       }
+      if (isBooking) payload.image_urls = form.image_urls
       const saved = await adminUpsertItem(editingItem?.id ?? null, payload) as Item
       setItems(
         editingItem
@@ -413,7 +446,7 @@ function ItemsEditor({ vendor, categories, items, itemLabel, isBooking, setItems
   const startEdit = (item: Item) => {
     setEditingItem(item)
     setForm({ name: item.name, description: item.description ?? '', price: item.price.toString(),
-      image_url: item.image_url ?? '', category_id: item.category_id,
+      image_url: item.image_url ?? '', image_urls: item.image_urls ?? [], category_id: item.category_id,
       is_available: item.is_available, sort_order: item.sort_order })
     setShowForm(true)
     window.scrollTo({ top: 0, behavior: 'smooth' })
@@ -473,28 +506,40 @@ function ItemsEditor({ vendor, categories, items, itemLabel, isBooking, setItems
                 {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </Field>
-            <Field label="Photo">
-              <div className="flex items-center gap-3">
-                {form.image_url ? (
-                  <div className="relative w-20 h-20 rounded-xl overflow-hidden border border-border group shrink-0">
-                    <img src={form.image_url} alt="" className="w-full h-full object-cover" />
-                    <button type="button" onClick={() => setForm({ ...form, image_url: '' })}
-                      className="absolute top-1 right-1 w-6 h-6 bg-white/90 rounded-full flex items-center justify-center text-brand text-sm font-bold opacity-0 group-hover:opacity-100 transition-opacity">
-                      ×
+            {isBooking ? (
+              <Field label="Room Photos" hint="Up to 5 photos — first photo is the main listing image">
+                <RoomPhotoGallery
+                  urls={form.image_urls}
+                  uploading={uploading}
+                  onUpload={handleRoomPhotoUpload}
+                  onRemove={handleRemoveRoomPhoto}
+                />
+                {uploadError && <p className="text-xs text-brand mt-2">{uploadError}</p>}
+              </Field>
+            ) : (
+              <Field label="Photo">
+                <div className="flex items-center gap-3">
+                  {form.image_url ? (
+                    <div className="relative w-20 h-20 rounded-xl overflow-hidden border border-border group shrink-0">
+                      <img src={form.image_url} alt="" className="w-full h-full object-cover" />
+                      <button type="button" onClick={() => setForm({ ...form, image_url: '' })}
+                        className="absolute top-1 right-1 w-6 h-6 bg-white/90 rounded-full flex items-center justify-center text-brand text-sm font-bold opacity-0 group-hover:opacity-100 transition-opacity">
+                        ×
+                      </button>
+                    </div>
+                  ) : (
+                    <button type="button" onClick={() => photoRef.current?.click()} disabled={uploading}
+                      className="w-20 h-20 rounded-xl border-2 border-dashed border-border flex flex-col items-center justify-center gap-1 text-fog hover:border-ink hover:text-ink transition-colors disabled:opacity-50 shrink-0">
+                      <span className="text-2xl leading-none">{uploading ? '…' : '+'}</span>
+                      <span className="text-[10px] font-semibold">{uploading ? 'Uploading' : 'Add photo'}</span>
                     </button>
-                  </div>
-                ) : (
-                  <button type="button" onClick={() => photoRef.current?.click()} disabled={uploading}
-                    className="w-20 h-20 rounded-xl border-2 border-dashed border-border flex flex-col items-center justify-center gap-1 text-fog hover:border-ink hover:text-ink transition-colors disabled:opacity-50 shrink-0">
-                    <span className="text-2xl leading-none">{uploading ? '…' : '+'}</span>
-                    <span className="text-[10px] font-semibold">{uploading ? 'Uploading' : 'Add photo'}</span>
-                  </button>
-                )}
-                {uploadError && <p className="text-xs text-brand">{uploadError}</p>}
-              </div>
-              <input ref={photoRef} type="file" accept="image/*" className="hidden"
-                onChange={(e) => { if (e.target.files?.[0]) handlePhotoUpload(e.target.files[0]); e.target.value = '' }} />
-            </Field>
+                  )}
+                  {uploadError && <p className="text-xs text-brand">{uploadError}</p>}
+                </div>
+                <input ref={photoRef} type="file" accept="image/*" className="hidden"
+                  onChange={(e) => { if (e.target.files?.[0]) handlePhotoUpload(e.target.files[0]); e.target.value = '' }} />
+              </Field>
+            )}
             <label className="flex items-center gap-2 cursor-pointer select-none">
               <input type="checkbox" checked={form.is_available}
                 onChange={(e) => setForm({ ...form, is_available: e.target.checked })}
