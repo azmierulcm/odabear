@@ -2,6 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { adminSupabase } from '@/lib/supabase/admin'
+import { storagePath } from '@/lib/storage'
 
 // Fields that admin is allowed to update on vendors — prevents accidental writes to user_id etc.
 const ALLOWED_VENDOR_FIELDS = new Set([
@@ -46,6 +47,16 @@ export async function adminUploadImage(vendorId: string, formData: FormData, buc
   console.log(`[admin] uploadImage vendor=${vendorId} bucket=${bucket} path=${data.path} by=${email}`)
   const { data: urlData } = adminSupabase.storage.from(bucket).getPublicUrl(data.path)
   return urlData.publicUrl
+}
+
+// Called when an admin replaces or removes an image, so the old file doesn't
+// linger as an orphan in the bucket.
+export async function adminDeleteImage(bucket: string, url: string): Promise<void> {
+  await verifyAdmin()
+  if (!UPLOAD_BUCKETS.has(bucket)) throw new Error('Invalid bucket.')
+  const path = storagePath(bucket, url)
+  if (!path) return
+  await adminSupabase.storage.from(bucket).remove([path])
 }
 
 export async function adminAddCategory(vendorId: string, name: string, sortOrder: number) {

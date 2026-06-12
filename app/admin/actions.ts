@@ -2,6 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { adminSupabase } from '@/lib/supabase/admin'
+import { storagePath } from '@/lib/storage'
 
 async function verifyAdmin(): Promise<string> {
   const supabase = await createClient()
@@ -74,12 +75,21 @@ export async function uploadBillingQr(formData: FormData): Promise<{ url: string
   if (!file.type.startsWith('image/')) throw new Error('Please upload an image file.')
   if (file.size > 5 * 1024 * 1024) throw new Error('File too large. Max 5 MB.')
 
+  const { data: existing } = await adminSupabase
+    .from('platform_settings')
+    .select('qr_url')
+    .eq('id', 1)
+    .maybeSingle()
+
   const ext  = file.name.split('.').pop() ?? 'png'
   const path = `platform/billing_${Date.now()}.${ext}`
   const { error: upErr } = await adminSupabase.storage
     .from('payment-qr')
     .upload(path, file, { upsert: true })
   if (upErr) throw new Error(`Upload failed: ${upErr.message}`)
+
+  const oldPath = storagePath('payment-qr', existing?.qr_url)
+  if (oldPath) await adminSupabase.storage.from('payment-qr').remove([oldPath])
 
   const { data: pub } = adminSupabase.storage.from('payment-qr').getPublicUrl(path)
   return { url: pub.publicUrl }

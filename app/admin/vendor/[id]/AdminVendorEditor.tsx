@@ -7,6 +7,7 @@ import type { Vendor, Category, Item, BusinessType } from '@/types/menu'
 import {
   adminUpdateVendor,
   adminUploadImage,
+  adminDeleteImage,
   adminAddCategory,
   adminUpdateCategory,
   adminDeleteCategory,
@@ -136,7 +137,10 @@ function ProfileEditor({ vendor, onSaved }: { vendor: Vendor; onSaved: (v: Vendo
     setUploading(false)
   }
 
-  const removeGalleryUrl = (i: number) => setGalleryUrls(galleryUrls.filter((_, idx) => idx !== i))
+  const removeGalleryUrl = (i: number) => {
+    void adminDeleteImage('vendor-galleries', galleryUrls[i]).catch(() => {})
+    setGalleryUrls(galleryUrls.filter((_, idx) => idx !== i))
+  }
 
   return (
     <div className="space-y-6">
@@ -374,7 +378,9 @@ function ItemsEditor({ vendor, categories, items, itemLabel, isBooking, setItems
       const formData = new FormData()
       formData.append('file', compressed)
       const url = await adminUploadImage(vendor.id, formData, 'item-images')
+      const oldUrl = form.image_url
       setForm((prev) => ({ ...prev, image_url: url }))
+      if (oldUrl) void adminDeleteImage('item-images', oldUrl).catch(() => {})
     } catch (err: unknown) {
       setUploadError(err instanceof Error ? err.message : 'Upload failed')
     }

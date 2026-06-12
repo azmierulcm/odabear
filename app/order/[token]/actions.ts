@@ -15,7 +15,7 @@ export async function submitPaymentReceipt(
   if (!UUID_RE.test(token)) return { ok: false, error: 'Invalid order link.' }
 
   const { data: order } = await adminSupabase
-    .from('orders').select('id, vendor_id, payment_status, short_order_id, total_price, customer_name').eq('order_token', token).maybeSingle()
+    .from('orders').select('id, vendor_id, payment_status, payment_proof_url, short_order_id, total_price, customer_name').eq('order_token', token).maybeSingle()
   if (!order) return { ok: false, error: 'Order not found.' }
   if (order.payment_status === 'confirmed') return { ok: false, error: 'This order is already confirmed.' }
 
@@ -41,6 +41,10 @@ export async function submitPaymentReceipt(
     })
     .eq('id', order.id)
   if (updErr) return { ok: false, error: 'Could not save your receipt. Please try again.' }
+
+  if (order.payment_proof_url) {
+    await adminSupabase.storage.from('payment-receipts').remove([order.payment_proof_url])
+  }
 
   await notifyReceiptUploaded(order.vendor_id, {
     type:         'order',

@@ -5,6 +5,7 @@ import Image from 'next/image'
 import dynamic from 'next/dynamic'
 import { createClient } from '@/lib/supabase/client'
 import { compressImage } from '@/lib/compressImage'
+import { storagePath } from '@/lib/storage'
 import { isDuitNowQr } from '@/lib/duitnowQr'
 import { decodeQrFromFile } from '@/lib/decodeQrImage'
 import { waUrl } from '@/lib/whatsapp'
@@ -303,8 +304,10 @@ function ProfileTab({ userId, vendor, businessType, onSaved, supabase }: {
     if (error) {
       setLogoUploadError(`Upload failed: ${error.message}`)
     } else if (data) {
+      const oldPath = storagePath('vendor-galleries', logoUrl)
       const { data: urlData } = supabase.storage.from('vendor-galleries').getPublicUrl(data.path)
       setLogoUrl(urlData.publicUrl)
+      if (oldPath) await supabase.storage.from('vendor-galleries').remove([oldPath])
     }
     setLogoUploading(false)
   }
@@ -539,7 +542,11 @@ function GalleryField({ userId, vendorId, urls, onChange, supabase }: {
     setUploading(false)
   }
 
-  const handleRemove = (i: number) => onChange(urls.filter((_, idx) => idx !== i))
+  const handleRemove = (i: number) => {
+    const oldPath = storagePath('vendor-galleries', urls[i])
+    if (oldPath) void supabase.storage.from('vendor-galleries').remove([oldPath])
+    onChange(urls.filter((_, idx) => idx !== i))
+  }
 
   return (
     <div className="space-y-4">
@@ -741,8 +748,10 @@ function ItemsTab({ userId, vendor, categories, items, itemLabel, isBooking, onC
     if (error) {
       setUploadError(`Upload failed: ${error.message}`)
     } else if (data) {
+      const oldPath = storagePath('item-images', form.image_url)
       const { data: urlData } = supabase.storage.from('item-images').getPublicUrl(data.path)
       setForm((prev) => ({ ...prev, image_url: urlData.publicUrl }))
+      if (oldPath) await supabase.storage.from('item-images').remove([oldPath])
     }
     setUploading(false)
   }
@@ -773,6 +782,8 @@ function ItemsTab({ userId, vendor, categories, items, itemLabel, isBooking, onC
   }
 
   const handleRemoveRoomPhoto = (i: number) => {
+    const oldPath = storagePath('item-images', form.image_urls[i])
+    if (oldPath) void supabase.storage.from('item-images').remove([oldPath])
     setForm((prev) => {
       const next = prev.image_urls.filter((_, idx) => idx !== i)
       return { ...prev, image_urls: next, image_url: next[0] ?? '' }
@@ -2407,9 +2418,19 @@ function SettingsTab({ userId, vendor, billing, onSaved, onPatchVendor, supabase
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
   const addMethod    = (type: PMDraft['type']) => setMethods((prev) => [...prev, emptyDraft(type)])
-  const removeMethod = (i: number) => setMethods((prev) => prev.filter((_, idx) => idx !== i))
+  const removeMethod = (i: number) => {
+    const oldPath = storagePath('payment-qr', methods[i]?.qr_url)
+    if (oldPath) void supabase.storage.from('payment-qr').remove([oldPath])
+    setMethods((prev) => prev.filter((_, idx) => idx !== i))
+  }
   const updateMethod = (i: number, patch: Partial<PMDraft>) =>
     setMethods((prev) => prev.map((m, idx) => idx === i ? { ...m, ...patch } as PMDraft : m))
+
+  const removeQr = (i: number) => {
+    const oldPath = storagePath('payment-qr', methods[i]?.qr_url)
+    if (oldPath) void supabase.storage.from('payment-qr').remove([oldPath])
+    updateMethod(i, { qr_url: undefined, duitnow_payload: undefined })
+  }
 
   const handleQrUpload = async (file: File, idx: number) => {
     if (file.size > 5 * 1024 * 1024) { setUploadError('File too large. Max 5 MB.'); return }
@@ -2428,9 +2449,11 @@ function SettingsTab({ userId, vendor, billing, onSaved, onPatchVendor, supabase
     if (error) {
       setUploadError(`Upload failed: ${error.message}`)
     } else if (data) {
+      const oldPath = storagePath('payment-qr', methods[idx]?.qr_url)
       const { data: urlData } = supabase.storage.from('payment-qr').getPublicUrl(data.path)
       const duitnow_payload = decoded && isDuitNowQr(decoded) ? decoded : undefined
       updateMethod(idx, { qr_url: urlData.publicUrl, duitnow_payload })
+      if (oldPath) await supabase.storage.from('payment-qr').remove([oldPath])
     }
     setUploadingIdx(null)
   }
@@ -2536,7 +2559,7 @@ function SettingsTab({ userId, vendor, billing, onSaved, onPatchVendor, supabase
                   </Field>
                 </div>
               )}
-              <QrUploadField qrUrl={m.qr_url} autoAmount={!!m.duitnow_payload} uploading={uploadingIdx === i} onUpload={(file) => handleQrUpload(file, i)} onRemove={() => updateMethod(i, { qr_url: undefined, duitnow_payload: undefined })} />
+              <QrUploadField qrUrl={m.qr_url} autoAmount={!!m.duitnow_payload} uploading={uploadingIdx === i} onUpload={(file) => handleQrUpload(file, i)} onRemove={() => removeQr(i)} />
             </div>
           ))}
         </div>

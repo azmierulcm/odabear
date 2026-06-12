@@ -17,7 +17,7 @@ export async function submitBookingReceipt(
 
   const { data: booking } = await adminSupabase
     .from('bookings')
-    .select('id, vendor_id, payment_status, short_booking_id, total_price, customer_name')
+    .select('id, vendor_id, payment_status, payment_proof_url, short_booking_id, total_price, customer_name')
     .eq('booking_token', token)
     .maybeSingle()
   if (!booking) return { ok: false, error: 'Booking not found.' }
@@ -48,6 +48,10 @@ export async function submitBookingReceipt(
     })
     .eq('id', booking.id)
   if (updErr) return { ok: false, error: 'Could not save your receipt. Please try again.' }
+
+  if (booking.payment_proof_url) {
+    await adminSupabase.storage.from('payment-receipts').remove([booking.payment_proof_url])
+  }
 
   await notifyReceiptUploaded(booking.vendor_id, {
     type:         'booking',
